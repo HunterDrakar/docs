@@ -1,0 +1,163 @@
+---
+title: "GET /runs/{run_id}/recipients"
+sidebarTitle: "GET /runs/{run_id}/recipients"
+description: "Destinatário a destinatário: status efetivo, erro, agendamento e resposta de botão. Paginado por cursor, filtrável por status."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/whatsapp/runs/{run_id}/recipients?status=read&limit=100&cursor=NDk
+```
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField path="run_id" type="string (uuid)" required>
+  O `run_id` devolvido pelo `POST /messages`.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filtra por status efetivo: `accepted`, `sent`, `delivered`, `read` ou `failed`. Outro valor é `400 ERR_INVALID_REQUEST`.
+</ParamField>
+
+<ParamField query="limit" default="50" type="integer">
+  De 1 a 100. Valores fora da faixa são ajustados para o limite.
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  O `next_cursor` da página anterior. Opaco; não interprete nem construa. Cursor ilegível é `400 ERR_INVALID_REQUEST`.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Destinatários na ordem em que foram enviados no `POST`.
+
+  <Expandable title="destinatário">
+    <ResponseField name="phone" type="string">
+      Telefone normalizado (`55DDDNUMERO`). No modo vinculado, o do paciente do agendamento.
+    </ResponseField>
+
+    <ResponseField name="mode" type="string">
+      `linked` ou `free`.
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      `accepted`, `sent`, `delivered`, `read` ou `failed`. Veja [o que cada um significa](/acompanhamento#status-de-cada-destinatario).
+    </ResponseField>
+
+    <ResponseField name="error" type="object | null">
+      Só quando `failed`.
+
+      <Expandable title="error">
+        <ResponseField name="code" type="string">
+          `ERR_META_REJECTED`, `ERR_CONTEXT_UNAVAILABLE` ou `ERR_INTERRUPTED`.
+        </ResponseField>
+
+        <ResponseField name="meta_code" type="integer | null">
+          Código de erro da Meta, quando ela recusou.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="sent_at" type="string (ISO 8601) | null">
+      Quando a Meta aceitou a mensagem.
+    </ResponseField>
+
+    <ResponseField name="appointment" type="object | null">
+      Só no modo vinculado.
+
+      <Expandable title="appointment">
+        <ResponseField name="id" type="string (uuid)">
+        </ResponseField>
+
+        <ResponseField name="status" type="string | null">
+          Status do agendamento **no Elim**, agora: `agendado`, `confirmado`, `cancelado`, `reagendado`, `pendente`, `compareceu` ou `faltou`. `null` se o agendamento foi apagado.
+        </ResponseField>
+
+        <ResponseField name="updated_at" type="string (ISO 8601) | null">
+          Última alteração do agendamento, por qualquer caminho (botão, recepção, integração).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="reply" type="object | null">
+      Último botão de ação tocado pelo paciente nessa conversa depois do envio. `null` sem toque, e sempre `null` no modo livre.
+
+      <Expandable title="reply">
+        <ResponseField name="button" type="string">
+          `confirmar`, `reagendar` ou `cancelar`.
+        </ResponseField>
+
+        <ResponseField name="clicked_at" type="string (ISO 8601)">
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="next_cursor" type="string | null">
+  Passe em `?cursor=` para a próxima página. `null` no fim.
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    {
+      "phone": "5511999990001",
+      "mode": "linked",
+      "status": "read",
+      "error": null,
+      "sent_at": "2026-09-02T04:47:16.062+00:00",
+      "appointment": {
+        "id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2",
+        "status": "confirmado",
+        "updated_at": "2026-09-02T05:39:06.049+00:00"
+      },
+      "reply": { "button": "confirmar", "clicked_at": "2026-09-02T05:39:05.191+00:00" }
+    },
+    {
+      "phone": "5511999990002",
+      "mode": "linked",
+      "status": "failed",
+      "error": { "code": "ERR_META_REJECTED", "meta_code": 131026 },
+      "sent_at": null,
+      "appointment": {
+        "id": "9c2b7a10-4f0e-4c3d-8a1b-2d5e6f7a8b9c",
+        "status": "agendado",
+        "updated_at": "2026-08-30T12:00:00.000+00:00"
+      },
+      "reply": null
+    },
+    {
+      "phone": "5511999990003",
+      "mode": "free",
+      "status": "delivered",
+      "error": null,
+      "sent_at": "2026-09-02T04:47:17.220+00:00",
+      "appointment": null,
+      "reply": null
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: `status` desconhecido ou `cursor` ilegível |
+| `404` | `ERR_RUN_NOT_FOUND` |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).
+
+<Note>
+  Com `?status=` ou `?cursor=`, uma página vazia é `200` com `data: []`. Sem nenhum dos dois, página vazia só acontece quando o run não é desta clínica, e a resposta é `404`.
+</Note>

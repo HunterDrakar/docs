@@ -1,0 +1,136 @@
+---
+title: "Acompanhamento"
+description: "Ciclo de vida do disparo, o que cada status de destinatário significa, respostas de botão, paginação por cursor e como fazer polling sem desperdiçar chamadas."
+---
+
+Depois do `202`, tudo passa pelo `run_id`. Duas rotas:
+
+- [`GET /runs/{run_id}`](/referencia/runs): o resumo, com contadores por status. Barato; é o que você consulta em loop.
+- [`GET /runs/{run_id}/recipients`](/referencia/run-recipients): destinatário a destinatário, paginado. É onde estão o erro, o status do agendamento e a resposta de botão.
+
+## Ciclo de vida do disparo
+
+```text
+accepted ──► processing ──► completed
+                  │
+                  └──────► interrupted
+```
+
+| `status` | Significado |
+| --- | --- |
+| `accepted` | Gravado, o envio ainda não começou. Dura segundos. |
+| `processing` | Enviando. Os contadores mudam a cada consulta. |
+| `completed` | Todo destinatário tem desfecho: `sent` ou `failed`. **Não** significa entregue: entrega e leitura continuam chegando depois. |
+| `interrupted` | O Elim tentou retomar o envio 12 vezes e desistiu. Os destinatários que não saíram ficam `failed` com `ERR_INTERRUPTED`. Raro; indica um problema que o Elim precisa olhar. |
+
+O campo `error` do run traz o último erro de infraestrutura visto durante o processamento (por exemplo, a Meta fora do ar). Ele pode estar preenchido num run `completed`: quer dizer que houve uma pausa e depois o envio seguiu.
+
+## Status de cada destinatário
+
+O `status` de um destinatário é o mais avançado que se sabe sobre ele, combinando o que o Elim fez com o que a Meta reportou depois:
+
+```text
+accepted ──► sent ──► delivered ──► read
+    │          │
+    └► failed  └► failed
+```
+
+| `status` | Significado | Quando muda |
+| --- | --- | --- |
+| `accepted` | Na fila, ou sendo enviado agora | Segundos a minutos |
+| `sent` | A Meta **aceitou** a mensagem e devolveu um id | Durante o processamento |
+| `delivered` | Chegou ao aparelho do paciente | Segundos a horas depois de `sent` (aparelho desligado, sem rede) |
+| `read` | O paciente abriu | Quando abrir. Pacientes com confirmação de leitura desligada nunca passam de `delivered`. |
+| `failed` | Não foi enviado, ou a Meta reportou falha depois | Durante o processamento, ou minutos depois via Meta |
+
+<Warning>
+  **`sent` não é entregue.** A Meta aceita a mensagem na hora e só depois informa entrega, leitura ou falha. Um número sem WhatsApp, por exemplo, é aceito e só vira `failed` alguns segundos ou minutos depois. Se a sua lógica depende de entrega, continue consultando por algumas horas depois de `completed`.
+</Warning>
+
+Quando `status` é `failed`, o campo `error` explica:
+
+```json
+"error": { "code": "ERR_META_REJECTED", "meta_code": 131026 }
+```
+
+Os códigos estão em [Erros por destinatário](/erros#erros-por-destinatario).
+
+## Respostas de botão e o agendamento
+
+No modo vinculado, cada destinatário traz o agendamento e a resposta:
+
+```json
+{
+  "phone": "5511999999999",
+  "mode": "linked",
+  "status": "read",
+  "error": null,
+  "sent_at": "2026-09-02T04:47:16.062+00:00",
+  "appointment": {
+    "id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2",
+    "status": "confirmado",
+    "updated_at": "2026-09-02T05:39:06.049+00:00"
+  },
+  "reply": { "button": "confirmar", "clicked_at": "2026-09-02T05:39:05.191+00:00" }
+}
+```
+
+- `reply` é o **último** botão de ação que o paciente tocou nessa conversa depois do envio: `confirmar`, `reagendar` ou `cancelar`. `null` enquanto não houver toque.
+- `appointment.status` é o status **no Elim**, e é o que vale. O toque em Confirmar vira `confirmado`; em Cancelar, `cancelado`; em Reagendar, o paciente recebe um link e o agendamento muda quando ele escolher a nova data. A recepção também pode mudar o status pela tela, e isso aparece aqui do mesmo jeito.
+- Valores possíveis de `appointment.status`: `agendado`, `confirmado`, `cancelado`, `reagendado`, `pendente`, `compareceu`, `faltou`.
+
+No modo livre, `appointment` e `reply` são sempre `null`.
+
+## Paginação
+
+`GET /runs/{run_id}/recipients` devolve até 100 destinatários por página (`limit`, padrão 50), em ordem estável, com um cursor opaco:
+
+```json
+{ "data": [ … ], "next_cursor": "NDk" }
+```
+
+Passe `next_cursor` em `?cursor=` para a próxima página. `next_cursor: null` é o fim. Não interprete nem construa o cursor; ele pode mudar de formato.
+
+`?status=` filtra por status efetivo: `accepted`, `sent`, `delivered`, `read` ou `failed`. Uma página vazia com filtro é `200` com `data: []`.
+
+## Polling sem desperdício
+
+<Steps>
+  <Step title="Até completar">
+    Consulte `GET /runs/{run_id}` a cada **15 a 30 segundos** até `status` sair de `accepted`/`processing`. Um run de 1.000 destinatários leva alguns minutos.
+  </Step>
+  <Step title="Falhas de envio">
+    Com `completed`, busque `GET /runs/{run_id}/recipients?status=failed` e trate os `error.code`. Isso é o que **não saiu**.
+  </Step>
+  <Step title="Entrega, leitura e respostas">
+    Repita `GET /runs/{run_id}` numa cadência mais lenta (a cada 5 a 15 minutos) enquanto os contadores `delivered`/`read` ainda estiverem subindo, e pagine `recipients` quando precisar das respostas. A maior parte das respostas de botão chega na primeira hora; lembretes enviados na véspera recebem toques até o dia da consulta.
+  </Step>
+</Steps>
+
+O limite de leitura é 120 requisições por minuto por chave. Um polling a cada 15 segundos usa 4.
+
+```javascript
+async function waitForRun(runId) {
+  for (;;) {
+    const run = await api(`/runs/${runId}`)
+    if (run.status === 'completed' || run.status === 'interrupted') return run
+    await sleep(20_000)
+  }
+}
+
+async function* recipients(runId, status) {
+  let cursor = null
+  do {
+    const qs = new URLSearchParams({ limit: '100' })
+    if (status) qs.set('status', status)
+    if (cursor) qs.set('cursor', cursor)
+    const page = await api(`/runs/${runId}/recipients?${qs}`)
+    yield* page.data
+    cursor = page.next_cursor
+  } while (cursor)
+}
+```
+
+## Retenção
+
+Um disparo fica consultável por **60 dias** a partir da criação. Depois disso, `GET /runs/{run_id}` responde `404 ERR_RUN_NOT_FOUND`. Se precisar do histórico, copie os resultados para o seu sistema antes.

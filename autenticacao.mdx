@@ -1,0 +1,64 @@
+---
+title: "Autenticação"
+description: "Chave por clínica, header Bearer, rotação, limites de requisição e o que cada erro de acesso significa."
+---
+
+Toda requisição leva a chave da clínica no header `Authorization`:
+
+```http
+Authorization: Bearer elim_live_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+A chave identifica a **clínica**. Tudo o que a API devolve é da clínica dona da chave, e nada mais: um `run_id` de outra clínica responde `404`, exatamente como um id inexistente.
+
+## Como obter a chave
+
+1. A equipe do Elim habilita a **API Pública** para a clínica.
+2. Em **Configurações → API**, gere a chave. O valor completo aparece **uma única vez**. O Elim guarda só um hash; se a chave se perder, é preciso gerar outra.
+3. Guarde a chave num cofre de segredos ou variável de ambiente. Nunca em código-fonte, repositório, planilha ou mensagem.
+
+<Warning>
+  Só existe **uma chave ativa por clínica**. Gerar uma nova revoga a anterior no mesmo instante: o sistema que usava a antiga passa a receber `401` imediatamente. Troque a chave no seu sistema antes de gerar a nova, ou faça a troca num horário sem disparos.
+</Warning>
+
+## Formato
+
+A chave começa com `elim_live_` seguido de 64 caracteres hexadecimais. O prefixo permite identificar a chave nos logs e na tela do Elim sem expor o segredo.
+
+## Erros de acesso
+
+| HTTP | Código | O que aconteceu |
+| --- | --- | --- |
+| `401` | `ERR_INVALID_KEY` | Header ausente, malformado, chave inexistente ou revogada. A resposta é a mesma em todos esses casos, de propósito. |
+| `403` | `ERR_FEATURE_DISABLED` | A chave é válida, mas a API Pública não está habilitada para a clínica ou a clínica está inativa. Fale com o Elim. |
+| `429` | `ERR_RATE_LIMITED` | Limite de requisições. Veja abaixo. |
+
+## Limites de requisição
+
+| Escopo | Limite |
+| --- | --- |
+| Por chave, rotas de leitura (`GET`) | 120 por minuto |
+| Por chave, `POST /messages` | 10 por minuto |
+| Por endereço IP, toda a API | 300 por minuto |
+
+Quando o limite é atingido, a resposta `429` traz:
+
+```http
+Retry-After: 37
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1756800037
+```
+
+`Retry-After` é em segundos. `X-RateLimit-Reset` é o instante em que o balde esvazia, em segundos desde a época Unix. Espere o `Retry-After` antes de tentar de novo; insistir só mantém o balde cheio.
+
+<Note>
+  O limite é contado por instância do servidor, então o valor efetivo pode ser um pouco maior que o da tabela. Trate os números como um freio, não como uma cota que você pode consumir até o último pedido.
+</Note>
+
+## Boas práticas
+
+- **Um cliente HTTP, uma chave.** Não distribua a chave para sistemas diferentes; cada um que precisa de acesso deveria passar pelo seu backend.
+- **Rotacione ao trocar de fornecedor** ou quando alguém que tinha acesso sair da equipe.
+- **Nunca envie a chave em query string.** Só no header `Authorization`.
+- **Trate `401` como definitivo.** Repetir a requisição com a mesma chave não vai funcionar. Alerte alguém.

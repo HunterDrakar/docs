@@ -1,0 +1,91 @@
+---
+title: "Erros"
+description: "O envelope de erro, todos os códigos ERR_* e o que fazer com cada um: tentar de novo, corrigir o pedido ou chamar alguém."
+---
+
+Programe contra o **código** (`ERR_*`), nunca contra a mensagem. A mensagem é em português, para gente ler, e pode mudar a qualquer momento. O código é contrato e só muda com uma nova versão da API.
+
+## Envelope
+
+Todo erro tem o mesmo formato:
+
+```json
+{
+  "error": {
+    "code": "ERR_MISSING_VARIABLES",
+    "message": "Variável obrigatória do template não foi enviada.",
+    "details": [
+      { "index": 2, "code": "ERR_MISSING_VARIABLES", "field": "variables.body_1" }
+    ]
+  }
+}
+```
+
+`details` só aparece em erros de validação do corpo. Cada item aponta o destinatário pelo `index` (posição no array `recipients` que você enviou) e, quando faz sentido, o `field` que causou o erro. `index: -1` significa que o problema é fora da lista, como um header ausente. A lista de `details` para em 50 itens.
+
+## Códigos
+
+### Acesso
+
+| HTTP | Código | Significado | Tentar de novo? |
+| --- | --- | --- | --- |
+| `401` | `ERR_INVALID_KEY` | Chave ausente, malformada, inexistente ou revogada | Não. Confira a chave. |
+| `403` | `ERR_FEATURE_DISABLED` | API não habilitada para a clínica, clínica inativa ou clínica de demonstração | Não. Fale com o Elim. |
+| `429` | `ERR_RATE_LIMITED` | Limite de requisições por chave ou por IP | Sim, após `Retry-After`. |
+
+### Pedido
+
+| HTTP | Código | Significado | Tentar de novo? |
+| --- | --- | --- | --- |
+| `400` | `ERR_INVALID_REQUEST` | JSON malformado, campo fora do schema, header `Idempotency-Key` ausente, `cursor` ilegível ou `status` desconhecido | Não. Corrija o pedido. |
+| `400` | `ERR_INVALID_CHANNEL` | `?channel=` não é `service` nem `dispatch` | Não. |
+| `404` | `ERR_TEMPLATE_NOT_FOUND` | Template não existe no número escolhido | Não. Confira `GET /templates` no mesmo `channel`. |
+| `404` | `ERR_RUN_NOT_FOUND` | Disparo inexistente, de outra clínica ou já expirado (60 dias) | Não. |
+| `409` | `ERR_TEMPLATE_NOT_APPROVED` | O template existe mas a Meta ainda não aprovou | Depois que a Meta aprovar. |
+| `409` | `ERR_IDEMPOTENCY_CONFLICT` | A mesma `Idempotency-Key` já foi usada com outro conteúdo | Não. Use uma chave nova para um pedido novo. |
+| `409` | `ERR_RUN_IN_PROGRESS` | Já existe um disparo em processamento para a clínica | Sim, quando o disparo atual terminar. Consulte `GET /runs`. |
+
+### Validação dos destinatários
+
+Tudo ou nada: se **um** destinatário for inválido, nada é enviado e a resposta é `422` com `details` para cada problema. O `code` do envelope é o do primeiro erro.
+
+| HTTP | Código | Significado |
+| --- | --- | --- |
+| `422` | `ERR_TOO_MANY_RECIPIENTS` | Mais de 1.000 destinatários |
+| `422` | `ERR_INVALID_PHONE` | Telefone ausente no modo livre, ou impossível de normalizar; no modo vinculado, o paciente do agendamento não tem telefone |
+| `422` | `ERR_DUPLICATE_RECIPIENT` | O mesmo telefone ou o mesmo `appointment_id` aparece duas vezes no disparo |
+| `422` | `ERR_MISSING_VARIABLES` | Uma variável `filled_by: client` não foi enviada |
+| `422` | `ERR_UNKNOWN_VARIABLE` | Variável que o template não tem |
+| `422` | `ERR_VARIABLE_NOT_ALLOWED` | Variável `filled_by: server`: o Elim preenche, você não pode enviar |
+| `422` | `ERR_VARIABLE_FORMAT` | Valor vazio, com mais de 1.024 caracteres, ou que ficou vazio após remover quebras de linha |
+| `422` | `ERR_TEMPLATE_REQUIRES_APPOINTMENT` | O template tem variável do servidor ou botão de ação, então só aceita destinatário vinculado a um agendamento |
+| `422` | `ERR_APPOINTMENT_NOT_FOUND` | `appointment_id` não existe nesta clínica |
+| `422` | `ERR_PHONE_MISMATCH` | O `phone` enviado não é o do paciente do agendamento. Omita `phone` no modo vinculado. |
+
+### Clínica e WhatsApp
+
+| HTTP | Código | Significado | Tentar de novo? |
+| --- | --- | --- | --- |
+| `409` | `ERR_NO_DISPATCH_PROVIDER` | A clínica não tem número da API Oficial (Meta) configurado no Elim | Não. Configure no Elim. |
+| `409` | `ERR_CHANNEL_NOT_CONFIGURED` | O `channel` pedido é válido, mas a clínica não tem número nele | Não. Use o outro canal (veja `GET /numbers`). |
+| `409` | `ERR_META_AUTH` | A conexão da clínica com a Meta expirou ou perdeu permissão | Não. É preciso reconectar dentro do Elim. |
+| `429` | `ERR_CLINIC_THROTTLED` | A Meta está bloqueando envios deste número (qualidade, limite de mensagens, verificação pendente). A mensagem traz o motivo. | Sim, mais tarde. `GET /numbers` mostra `health_reason`. |
+| `502` | `ERR_META_UNAVAILABLE` | A Meta não respondeu | Sim, com espera exponencial. |
+| `500` | `ERR_INTERNAL` | Falha interna do Elim | Sim, uma ou duas vezes. Se persistir, fale com o Elim. |
+
+## Erros por destinatário
+
+Estes não são respostas HTTP. Aparecem em `GET /runs/{run_id}/recipients`, no campo `error` de um destinatário com `status: failed`.
+
+| Código | Significado |
+| --- | --- |
+| `ERR_META_REJECTED` | A Meta recusou o envio para este número. `meta_code` traz o código da Meta (por exemplo `131026`, número sem WhatsApp, ou `131049`, a Meta limitou o volume de marketing para esse usuário). |
+| `ERR_CONTEXT_UNAVAILABLE` | O agendamento não tinha dado suficiente para montar a mensagem (paciente sem telefone, médico ou data ausentes). |
+| `ERR_INTERRUPTED` | O envio foi interrompido antes de a Meta responder e não pôde ser retomado com segurança. Não houve envio. |
+
+## Como tratar
+
+- **`4xx` de validação** (`400`, `422`): erro do pedido. Não repita sem corrigir.
+- **`409`**: estado da clínica ou do disparo. Leia o código; cada um tem um remédio diferente.
+- **`429`**: espere. Nos limites de requisição, o `Retry-After` diz quanto; no bloqueio da Meta, consulte `GET /numbers` antes de tentar de novo.
+- **`5xx`**: repita com espera exponencial e a **mesma** `Idempotency-Key`. Se o disparo tiver sido criado antes da falha, a repetição devolve o `run_id` original em vez de criar outro.

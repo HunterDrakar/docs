@@ -1,0 +1,101 @@
+---
+title: "GET /numbers"
+sidebarTitle: "GET /numbers"
+description: "Os números da API Oficial da clínica e se a Meta está aceitando envios por cada um."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/whatsapp/numbers
+```
+
+A saúde é **perguntada à Meta**, não inferida de falhas recentes. Use antes de um disparo grande: se `can_send_message` for `BLOCKED`, o `POST /messages` vai responder `429 ERR_CLINIC_THROTTLED` com o mesmo motivo.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Um item por número, o de disparo primeiro.
+
+  <Expandable title="item">
+    <ResponseField name="channel" type="string">
+      `dispatch` ou `service`. É o valor aceito em `?channel=` nas outras rotas.
+    </ResponseField>
+
+    <ResponseField name="phone_number_id" type="string">
+      Id do número na Meta.
+    </ResponseField>
+
+    <ResponseField name="display_phone_number" type="string | null">
+      O número como aparece para o paciente.
+    </ResponseField>
+
+    <ResponseField name="verified_name" type="string | null">
+      Nome exibido, verificado pela Meta.
+    </ResponseField>
+
+    <ResponseField name="can_send_message" type="string | null">
+      `AVAILABLE`, `LIMITED` ou `BLOCKED`, como a Meta reporta. `LIMITED` envia com restrições. `null` quando a Meta não informou.
+    </ResponseField>
+
+    <ResponseField name="health_reason" type="string | null">
+      Explicação em português quando `BLOCKED`: código da Meta e o que fazer. `null` nos demais casos.
+    </ResponseField>
+
+    <ResponseField name="messaging_limit_tier" type="string | null">
+      Faixa de volume da Meta, por exemplo `TIER_1K` (1.000 conversas iniciadas por 24h).
+    </ResponseField>
+
+    <ResponseField name="quality_rating" type="string | null">
+      `GREEN`, `YELLOW` ou `RED`. Qualidade cai com bloqueios e denúncias de pacientes.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    {
+      "channel": "dispatch",
+      "phone_number_id": "123456789012345",
+      "display_phone_number": "+55 11 4000-0000",
+      "verified_name": "Clínica Exemplo",
+      "can_send_message": "BLOCKED",
+      "health_reason": "Método de pagamento pendente na conta do WhatsApp Business (141006). Adicione um método de pagamento no Gerenciador de Negócios da Meta.",
+      "messaging_limit_tier": "TIER_250",
+      "quality_rating": "GREEN"
+    },
+    {
+      "channel": "service",
+      "phone_number_id": "987654321098765",
+      "display_phone_number": "+55 11 99999-0000",
+      "verified_name": "Clínica Exemplo",
+      "can_send_message": "AVAILABLE",
+      "health_reason": null,
+      "messaging_limit_tier": "TIER_1K",
+      "quality_rating": "GREEN"
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `409` | `ERR_NO_DISPATCH_PROVIDER` (a clínica não tem número da API Oficial), `ERR_META_AUTH` |
+| `502` | `ERR_META_UNAVAILABLE` |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).
+
+<Note>
+  A saúde é cacheada por até 60 segundos por número. A resposta é tudo ou nada: se a Meta não responder sobre um dos números, a rota devolve `502` em vez de uma lista parcial que pareceria completa.
+</Note>

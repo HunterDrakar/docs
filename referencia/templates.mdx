@@ -1,0 +1,148 @@
+---
+title: "GET /templates"
+sidebarTitle: "GET /templates"
+description: "Templates aprovados pela Meta no número escolhido, com o contrato de variáveis de cada um."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/whatsapp/templates?channel=dispatch
+```
+
+Devolve apenas templates com `status: APPROVED`. Templates pendentes, rejeitados ou pausados não aparecem, porque não podem ser disparados.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField query="channel" type="string">
+  `dispatch` ou `service`. Padrão: `dispatch` se a clínica tiver esse número, senão `service`. O template pertence ao número: use o mesmo `channel` no `POST /messages`.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Um item por template aprovado.
+
+  <Expandable title="item">
+    <ResponseField name="name" type="string">
+      Nome do template. É o valor de `template` no disparo.
+    </ResponseField>
+
+    <ResponseField name="language" type="string">
+      Código do idioma na Meta, por exemplo `pt_BR`.
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      Sempre `APPROVED` nesta rota.
+    </ResponseField>
+
+    <ResponseField name="category" type="string">
+      `UTILITY`, `MARKETING` ou `AUTHENTICATION`. Afeta o custo e os limites da Meta.
+    </ResponseField>
+
+    <ResponseField name="header_text" type="string | null">
+      Texto do cabeçalho com os `{{N}}` no lugar. `null` sem cabeçalho ou com cabeçalho de mídia.
+    </ResponseField>
+
+    <ResponseField name="body_text" type="string | null">
+      Texto do corpo com os `{{N}}` no lugar.
+    </ResponseField>
+
+    <ResponseField name="footer_text" type="string | null">
+      Texto do rodapé.
+    </ResponseField>
+
+    <ResponseField name="buttons" type="array">
+      Botões do template: `{ type, text }`, com `type` em `QUICK_REPLY`, `URL`, `PHONE_NUMBER` ou `COPY_CODE`.
+    </ResponseField>
+
+    <ResponseField name="supports_actions" type="boolean">
+      Tem botão de Confirmar, Reagendar ou Cancelar. Esses botões só agem no modo vinculado, e o template só aceita esse modo.
+    </ResponseField>
+
+    <ResponseField name="variables" type="array">
+      Contrato de variáveis, na ordem em que aparecem no template.
+
+      <Expandable title="variável">
+        <ResponseField name="key" type="string">
+          Chave usada em `recipients[].variables`. Nome configurado no Elim (`patient_name`, `appointment_date`) ou posicional (`body_1`, `header_1`).
+        </ResponseField>
+
+        <ResponseField name="section" type="string">
+          `header` ou `body`.
+        </ResponseField>
+
+        <ResponseField name="filled_by" type="string">
+          `server`: o Elim preenche; não envie. `client`: você envia; obrigatória.
+        </ResponseField>
+
+        <ResponseField name="type" type="string">
+          `text`, `date`, `time` ou `url`. Informativo: variáveis `client` são sempre `text`.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    {
+      "name": "lembrete_consulta",
+      "language": "pt_BR",
+      "status": "APPROVED",
+      "category": "UTILITY",
+      "header_text": null,
+      "body_text": "Olá {{1}}, sua consulta com {{2}} está marcada para {{3}} às {{4}}. Podemos confirmar?",
+      "footer_text": null,
+      "buttons": [
+        { "type": "QUICK_REPLY", "text": "Confirmar" },
+        { "type": "QUICK_REPLY", "text": "Reagendar" },
+        { "type": "QUICK_REPLY", "text": "Cancelar" }
+      ],
+      "supports_actions": true,
+      "variables": [
+        { "key": "patient_name", "section": "body", "filled_by": "server", "type": "text" },
+        { "key": "doctor_name", "section": "body", "filled_by": "server", "type": "text" },
+        { "key": "appointment_date", "section": "body", "filled_by": "server", "type": "date" },
+        { "key": "appointment_time", "section": "body", "filled_by": "server", "type": "time" }
+      ]
+    },
+    {
+      "name": "aviso_campanha",
+      "language": "pt_BR",
+      "status": "APPROVED",
+      "category": "MARKETING",
+      "header_text": null,
+      "body_text": "{{1}}, a clínica está com vagas para {{2}}. Responda para agendar.",
+      "footer_text": "Responda SAIR para não receber mais.",
+      "buttons": [],
+      "supports_actions": false,
+      "variables": [
+        { "key": "body_1", "section": "body", "filled_by": "client", "type": "text" },
+        { "key": "body_2", "section": "body", "filled_by": "client", "type": "text" }
+      ]
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_CHANNEL` |
+| `409` | `ERR_NO_DISPATCH_PROVIDER`, `ERR_CHANNEL_NOT_CONFIGURED`, `ERR_META_AUTH` |
+| `502` | `ERR_META_UNAVAILABLE` |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).
+
+<Note>
+  A lista da Meta é cacheada por até 60 segundos. Um template recém-aprovado pode levar esse tempo para aparecer.
+</Note>

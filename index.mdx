@@ -1,20 +1,90 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Introdução"
+description: "O que a API Pública do Elim faz, o que ela não faz, e o caminho mais curto até o primeiro disparo."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+A API Pública do Elim permite que o sistema da sua clínica dispare **templates de WhatsApp aprovados pela Meta** para os pacientes e acompanhe o resultado: envio, entrega, leitura e o botão que o paciente tocou.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+Ela usa o mesmo número e os mesmos templates que a clínica já configurou no Elim. Nada precisa ser cadastrado de novo: o que aparece na tela do Elim é o que a API enxerga.
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## O que dá para fazer
+
+| Endpoint | Para quê |
+| --- | --- |
+| [`GET /templates`](/referencia/templates) | Listar os templates aprovados e o contrato de variáveis de cada um |
+| [`GET /numbers`](/referencia/numeros) | Ver os números da clínica e se a Meta está aceitando envios por eles |
+| [`POST /messages`](/referencia/messages) | Disparar um template para até 1.000 destinatários de uma vez |
+| [`GET /runs/{run_id}`](/referencia/runs) | Acompanhar o disparo com contadores por status |
+| [`GET /runs/{run_id}/recipients`](/referencia/run-recipients) | Ver destinatário a destinatário: status, erro, agendamento e resposta de botão |
+
+## O que fica de fora nesta versão
+
+- **Webhook para o seu sistema.** As respostas chegam por consulta (`GET /runs`), não por push. Faça polling.
+- **Criar ou editar templates.** Templates passam pela aprovação da Meta e são gerenciados dentro do Elim.
+- **Texto livre.** Só templates aprovados. A janela de 24 horas de conversa não é exposta pela API.
+
+## Endereço base
+
+```text
+https://www.elimagenda.com.br/api/v1/whatsapp
+```
+
+Todas as rotas desta documentação são relativas a esse endereço. Toda resposta vem com `Cache-Control: no-store`: nunca guarde uma resposta em cache intermediário.
+
+## Do zero ao primeiro disparo
+
+<Steps>
+  <Step title="Peça a habilitação">
+    A API é liberada por clínica pela equipe do Elim. Quando estiver ativa, a aba **API** aparece em **Configurações**.
+  </Step>
+  <Step title="Gere a chave">
+    Em Configurações → API, gere a chave. Ela é exibida **uma única vez**. Guarde num cofre de segredos, nunca no código-fonte. Veja [Autenticação](/autenticacao).
+  </Step>
+  <Step title="Descubra o template e o número">
+    Chame `GET /templates` para ver os templates aprovados e o que cada um espera de você, e `GET /numbers` para confirmar que o número está liberado pela Meta.
+  </Step>
+  <Step title="Dispare">
+    Envie um `POST /messages` com o nome do template e a lista de destinatários, sempre com o header `Idempotency-Key`. A resposta é `202` com o `run_id`. Veja [Disparos](/disparos).
+  </Step>
+  <Step title="Acompanhe">
+    Consulte `GET /runs/{run_id}` até o status ficar `completed`, e depois `GET /runs/{run_id}/recipients` para ver leitura e respostas. Veja [Acompanhamento](/acompanhamento).
+  </Step>
+</Steps>
+
+## Um disparo completo em três chamadas
+
+```bash
+# 1. Qual template? O que ele espera?
+curl -s https://www.elimagenda.com.br/api/v1/whatsapp/templates \
+  -H "Authorization: Bearer $ELIM_API_KEY"
+
+# 2. Dispara para um agendamento do Elim (modo vinculado)
+curl -s -X POST https://www.elimagenda.com.br/api/v1/whatsapp/messages \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Idempotency-Key: lembrete-2026-09-02-turno-manha" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "lembrete_consulta",
+    "recipients": [
+      { "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2" }
+    ]
+  }'
+# → 202 { "run_id": "673e92bb-…", "status": "accepted", "total": 1 }
+
+# 3. Como foi?
+curl -s https://www.elimagenda.com.br/api/v1/whatsapp/runs/673e92bb-3531-4218-a2da-b9568dc4d500/recipients \
+  -H "Authorization: Bearer $ELIM_API_KEY"
+```
+
+## Limites
+
+| Limite | Valor |
+| --- | --- |
+| Destinatários por disparo | 1.000 |
+| Disparos em processamento por clínica | 1 por vez |
+| Chaves ativas por clínica | 1 |
+| Retenção dos disparos para consulta | 60 dias |
+| Requisições de leitura | 120 por minuto por chave |
+| `POST /messages` | 10 por minuto por chave |
+
+Os limites de requisição são um freio contra abuso, não uma cota contratual. Se receber `429`, respeite o header `Retry-After`.

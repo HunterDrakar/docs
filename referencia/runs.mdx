@@ -1,0 +1,115 @@
+---
+title: "GET /runs/{run_id}"
+sidebarTitle: "GET /runs/{run_id}"
+description: "Resumo de um disparo: status do run e contadores de destinatários por status efetivo."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/whatsapp/runs/{run_id}
+```
+
+É a rota do polling. Uma consulta por chamada, sem paginação.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField path="run_id" type="string (uuid)" required>
+  O `run_id` devolvido pelo `POST /messages`.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="run_id" type="string (uuid)">
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  `accepted`, `processing`, `completed` ou `interrupted`. Veja o [ciclo de vida](/acompanhamento#ciclo-de-vida-do-disparo).
+</ResponseField>
+
+<ResponseField name="channel" type="string">
+  `dispatch` ou `service`: o número usado.
+</ResponseField>
+
+<ResponseField name="template" type="string">
+  Nome do template.
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Destinatários do disparo.
+</ResponseField>
+
+<ResponseField name="counts" type="object">
+  Quantos destinatários estão em cada status efetivo. A soma é sempre `total`.
+
+  <Expandable title="counts">
+    <ResponseField name="accepted" type="integer">
+      Na fila ou sendo enviados.
+    </ResponseField>
+
+    <ResponseField name="sent" type="integer">
+      A Meta aceitou; entrega ainda não confirmada.
+    </ResponseField>
+
+    <ResponseField name="delivered" type="integer">
+      Chegaram ao aparelho.
+    </ResponseField>
+
+    <ResponseField name="read" type="integer">
+      Abertos pelo paciente.
+    </ResponseField>
+
+    <ResponseField name="failed" type="integer">
+      Não enviados, ou reprovados pela Meta depois.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Último erro de infraestrutura visto durante o processamento, quando houve. Pode estar preenchido num run `completed`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string (ISO 8601)">
+  Quando o `POST` foi aceito.
+</ResponseField>
+
+<ResponseField name="started_at" type="string (ISO 8601) | null">
+  Início do envio.
+</ResponseField>
+
+<ResponseField name="finished_at" type="string (ISO 8601) | null">
+  Quando todo destinatário ganhou desfecho de envio. `null` enquanto `accepted` ou `processing`.
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "run_id": "673e92bb-3531-4218-a2da-b9568dc4d500",
+  "status": "completed",
+  "channel": "dispatch",
+  "template": "lembrete_consulta",
+  "total": 250,
+  "counts": { "accepted": 0, "sent": 31, "delivered": 140, "read": 72, "failed": 7 },
+  "error": null,
+  "created_at": "2026-09-02T04:47:12.089+00:00",
+  "started_at": "2026-09-02T04:47:12.511+00:00",
+  "finished_at": "2026-09-02T04:49:58.710+00:00"
+}
+```
+
+```json 404
+{ "error": { "code": "ERR_RUN_NOT_FOUND", "message": "Disparo não encontrado." } }
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `404` | `ERR_RUN_NOT_FOUND`: id inexistente, de outra clínica, malformado ou com mais de 60 dias. Sempre a mesma resposta. |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

@@ -1,0 +1,149 @@
+---
+title: "POST /messages"
+sidebarTitle: "POST /messages"
+description: "Dispara um template aprovado para até 1.000 destinatários. Responde 202 com o run_id; o envio roda em segundo plano."
+---
+
+```http
+POST https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=dispatch
+```
+
+Leia [Como disparar](/disparos) antes: modos, variáveis e Idempotency-Key estão explicados lá. Esta página é a referência do contrato.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField header="Idempotency-Key" type="string" required>
+  Até 255 caracteres. Mesma chave + mesmo corpo devolve o run existente (`200`); mesma chave + corpo diferente é `409 ERR_IDEMPOTENCY_CONFLICT`. Sem o header, `400 ERR_INVALID_REQUEST`.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  `application/json`
+</ParamField>
+
+<ParamField query="channel" type="string">
+  `dispatch` ou `service`. Padrão: `dispatch` se existir, senão `service`. Tem que ser o mesmo canal onde o template foi listado.
+</ParamField>
+
+## Corpo
+
+<ParamField body="template" type="string" required>
+  Nome do template, como em `GET /templates`.
+</ParamField>
+
+<ParamField body="recipients" type="array" required>
+  De 1 a 1.000 destinatários. Cada um é vinculado (tem `appointment_id`) ou livre (só `phone`).
+
+  <Expandable title="destinatário">
+    <ParamField body="appointment_id" type="string (uuid)">
+      Id de um agendamento da clínica no Elim. Define o modo vinculado. O destino é o telefone do paciente desse agendamento.
+    </ParamField>
+
+    <ParamField body="phone" type="string">
+      Obrigatório no modo livre. Opcional no vinculado; se vier, tem que ser o telefone do paciente (`422 ERR_PHONE_MISMATCH` se não for). Qualquer formato brasileiro; normalizado para `55DDDNUMERO`.
+    </ParamField>
+
+    <ParamField body="variables" type="object">
+      Chave → valor para as variáveis `filled_by: client` do template. Todas as `client` são obrigatórias; nenhuma `server` é aceita. Valores de 1 a 1.024 caracteres; espaços em sequência e quebras de linha são reduzidos a um espaço.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<RequestExample>
+
+```bash Vinculado
+curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=dispatch" \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Idempotency-Key: lembretes-2026-09-03-manha" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "lembrete_consulta",
+    "recipients": [
+      { "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2" },
+      { "appointment_id": "9c2b7a10-4f0e-4c3d-8a1b-2d5e6f7a8b9c" }
+    ]
+  }'
+```
+
+```bash Livre
+curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=dispatch" \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Idempotency-Key: campanha-checkup-2026-09" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "aviso_campanha",
+    "recipients": [
+      { "phone": "+55 11 99999-0001", "variables": { "body_1": "Ana", "body_2": "check-up anual" } },
+      { "phone": "+55 11 99999-0002", "variables": { "body_1": "Bruno", "body_2": "check-up anual" } }
+    ]
+  }'
+```
+
+</RequestExample>
+
+## Resposta `202`
+
+<ResponseField name="run_id" type="string (uuid)">
+  Use em `GET /runs/{run_id}`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  `accepted`.
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Destinatários aceitos. Igual ao tamanho de `recipients`, porque a validação é tudo ou nada.
+</ResponseField>
+
+Uma repetição com a mesma `Idempotency-Key` e o mesmo corpo responde **`200`** com o mesmo formato e o `status` atual do run (`accepted`, `processing`, `completed` ou `interrupted`).
+
+<ResponseExample>
+
+```json 202
+{
+  "run_id": "673e92bb-3531-4218-a2da-b9568dc4d500",
+  "status": "accepted",
+  "total": 2
+}
+```
+
+```json 422
+{
+  "error": {
+    "code": "ERR_MISSING_VARIABLES",
+    "message": "Variável obrigatória do template não foi enviada.",
+    "details": [
+      { "index": 1, "code": "ERR_MISSING_VARIABLES", "field": "variables.body_2" },
+      { "index": 3, "code": "ERR_INVALID_PHONE", "field": "phone" }
+    ]
+  }
+}
+```
+
+```json 429
+{
+  "error": {
+    "code": "ERR_CLINIC_THROTTLED",
+    "message": "A conta do WhatsApp está bloqueada para envio: Método de pagamento pendente na conta do WhatsApp Business (141006)."
+  }
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST` (JSON, schema ou `Idempotency-Key` ausente), `ERR_INVALID_CHANNEL` |
+| `403` | `ERR_FEATURE_DISABLED` (inclusive clínica de demonstração) |
+| `404` | `ERR_TEMPLATE_NOT_FOUND` |
+| `409` | `ERR_TEMPLATE_NOT_APPROVED`, `ERR_IDEMPOTENCY_CONFLICT`, `ERR_RUN_IN_PROGRESS`, `ERR_NO_DISPATCH_PROVIDER`, `ERR_CHANNEL_NOT_CONFIGURED`, `ERR_META_AUTH` |
+| `422` | `ERR_TOO_MANY_RECIPIENTS`, `ERR_INVALID_PHONE`, `ERR_DUPLICATE_RECIPIENT`, `ERR_MISSING_VARIABLES`, `ERR_UNKNOWN_VARIABLE`, `ERR_VARIABLE_NOT_ALLOWED`, `ERR_VARIABLE_FORMAT`, `ERR_TEMPLATE_REQUIRES_APPOINTMENT`, `ERR_APPOINTMENT_NOT_FOUND`, `ERR_PHONE_MISMATCH` |
+| `429` | `ERR_RATE_LIMITED` (10 por minuto por chave), `ERR_CLINIC_THROTTLED` |
+| `502` | `ERR_META_UNAVAILABLE` |
+
+A ordem das verificações está em [Como disparar](/disparos#o-que-o-elim-confere-antes-do-202). O replay da `Idempotency-Key` acontece **antes** do template e da validação: repetir um pedido já aceito nunca devolve um `404` ou `429` novo.

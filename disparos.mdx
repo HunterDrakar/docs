@@ -1,0 +1,153 @@
+---
+title: "Como disparar"
+description: "Escolher o template, entender o contrato de variáveis, os dois modos de destinatário, a Idempotency-Key e o que acontece depois do 202."
+---
+
+Um disparo é **um template para N destinatários**, até 1.000 por vez. O Elim valida tudo antes de aceitar, responde `202` com um `run_id` e envia em segundo plano. Você acompanha pelo `run_id`.
+
+## 1. Escolha o template e leia o contrato
+
+`GET /templates` devolve só os templates **aprovados pela Meta** no número escolhido, cada um com o seu contrato:
+
+```json
+{
+  "name": "lembrete_consulta",
+  "language": "pt_BR",
+  "status": "APPROVED",
+  "category": "UTILITY",
+  "header_text": null,
+  "body_text": "Olá {{1}}, sua consulta com {{2}} está marcada para {{3}} às {{4}}. Podemos confirmar?",
+  "footer_text": null,
+  "buttons": [
+    { "type": "QUICK_REPLY", "text": "Confirmar" },
+    { "type": "QUICK_REPLY", "text": "Reagendar" },
+    { "type": "QUICK_REPLY", "text": "Cancelar" }
+  ],
+  "supports_actions": true,
+  "variables": [
+    { "key": "patient_name",     "section": "body", "filled_by": "server", "type": "text" },
+    { "key": "doctor_name",      "section": "body", "filled_by": "server", "type": "text" },
+    { "key": "appointment_date", "section": "body", "filled_by": "server", "type": "date" },
+    { "key": "appointment_time", "section": "body", "filled_by": "server", "type": "time" }
+  ]
+}
+```
+
+O que importa para o disparo:
+
+| Campo | O que diz |
+| --- | --- |
+| `variables[].filled_by` | `server`: o Elim preenche a partir do agendamento; **não envie**. `client`: **você** envia, e é obrigatória. |
+| `variables[].key` | A chave que vai em `variables` no disparo. Para variáveis do cliente sem nome configurado, é posicional: `body_1`, `body_2`, `header_1`. |
+| `supports_actions` | Tem botões de Confirmar / Reagendar / Cancelar. Só funciona no modo vinculado. |
+
+<Tip>
+  O template é do número. Se a clínica tem dois números (`service` e `dispatch`), a lista de um não vale para o outro. Chame `GET /templates?channel=...` com o mesmo `channel` que vai usar no disparo.
+</Tip>
+
+## 2. Escolha o modo de cada destinatário
+
+Um mesmo disparo pode misturar os dois modos.
+
+<Tabs>
+  <Tab title="Vinculado (com agendamento)">
+    Você manda o `appointment_id` de um agendamento que existe no Elim.
+
+    ```json
+    { "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2" }
+    ```
+
+    - O destino é o **telefone do paciente do agendamento**. `phone` é opcional; se vier e for diferente, `422 ERR_PHONE_MISMATCH`.
+    - As variáveis `server` (nome do paciente, médico, data, hora, procedimento, link de reagendamento) são preenchidas pelo Elim.
+    - Os botões de ação funcionam: o toque em **Confirmar** muda o status do agendamento no Elim, e você vê isso em `GET /runs/{run_id}/recipients`.
+    - Templates com variável `server` ou `supports_actions: true` **só** aceitam este modo.
+  </Tab>
+  <Tab title="Livre (só telefone)">
+    Você manda o telefone e todas as variáveis `client`.
+
+    ```json
+    { "phone": "+55 11 99999-9999", "variables": { "body_1": "Ana", "body_2": "segunda-feira" } }
+    ```
+
+    - Serve para templates que não dependem de agendamento (avisos, campanhas, lembretes genéricos).
+    - Não há botão de ação: nada muda no Elim quando o paciente responde.
+    - Se o template tiver variável `server` ou botão de ação, a resposta é `422 ERR_TEMPLATE_REQUIRES_APPOINTMENT`.
+  </Tab>
+</Tabs>
+
+### Telefones
+
+Qualquer formato brasileiro é aceito: `+55 11 99999-9999`, `(11) 99999-9999`, `11999999999`, `5511999999999`. O Elim normaliza para dígitos E.164 sem `+` (`5511999999999`) e é assim que o telefone volta nas consultas. O mesmo telefone duas vezes no disparo é `422 ERR_DUPLICATE_RECIPIENT`.
+
+### Variáveis
+
+- Valores são texto de 1 a 1.024 caracteres.
+- Quebras de linha, tabulações e sequências de espaços são reduzidas a um espaço (a Meta recusa o envio com elas).
+- Enviar uma variável `server` é `422 ERR_VARIABLE_NOT_ALLOWED`; esquecer uma `client` é `422 ERR_MISSING_VARIABLES`; inventar uma chave é `422 ERR_UNKNOWN_VARIABLE`.
+
+## 3. Mande a Idempotency-Key
+
+O header `Idempotency-Key` é **obrigatório** (até 255 caracteres). Ele protege contra o pior cenário de um disparo: a rede cai depois de o Elim aceitar, você não recebe o `202`, repete o pedido, e o paciente recebe a mesma mensagem duas vezes.
+
+| Repetição com a mesma chave | Resultado |
+| --- | --- |
+| Mesmo corpo | `200` com o `run_id` **original** e o status atual dele. Nada é enviado de novo. |
+| Corpo diferente | `409 ERR_IDEMPOTENCY_CONFLICT`. Use outra chave. |
+
+A comparação ignora diferenças de formatação: telefones normalizados, espaços duplicados e ordem das chaves não contam como "corpo diferente".
+
+Use algo que identifique **a intenção**, não o momento: `lembretes-2026-09-03-manha`, o id do seu job, um UUID gravado antes de chamar. Nunca um timestamp gerado a cada tentativa.
+
+## 4. Dispare
+
+```bash
+curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=service" \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Idempotency-Key: lembretes-2026-09-03-manha" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "lembrete_consulta",
+    "recipients": [
+      { "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2" },
+      { "appointment_id": "9c2b7a10-4f0e-4c3d-8a1b-2d5e6f7a8b9c" }
+    ]
+  }'
+```
+
+```json
+HTTP/1.1 202 Accepted
+{ "run_id": "673e92bb-3531-4218-a2da-b9568dc4d500", "status": "accepted", "total": 2 }
+```
+
+`202` significa **aceito para envio**, não enviado. `total` é o número de destinatários válidos, que é sempre o número que você mandou, porque a validação é tudo ou nada.
+
+### O que o Elim confere antes do 202
+
+1. Chave, feature, limite de requisições.
+2. Corpo e `Idempotency-Key`.
+3. Replay da `Idempotency-Key` (devolve o run existente, se houver).
+4. Template existe e está aprovado no canal.
+5. Cada destinatário: modo, telefone, variáveis, agendamento existe, telefone bate.
+6. Saúde do número na Meta: se a Meta está bloqueando envios, `429 ERR_CLINIC_THROTTLED` com o motivo.
+7. Não há outro disparo em processamento na clínica (`409 ERR_RUN_IN_PROGRESS`).
+
+Só então o run é gravado e o envio começa.
+
+## 5. O que acontece depois
+
+O envio roda em segundo plano, em lotes, respeitando o ritmo que a Meta aceita. Um disparo de 1.000 destinatários leva alguns minutos. Se o processamento for interrompido (por exemplo, por um limite de tempo do servidor), um processo de recuperação retoma de onde parou em até 5 minutos, sem reenviar o que já saiu.
+
+Um destinatário nunca é enviado duas vezes pelo mesmo run: cada um passa por uma reserva atômica antes do envio.
+
+De lá em diante, tudo está em [Acompanhamento](/acompanhamento).
+
+## Escolhendo o número
+
+Clínicas com dois números da API Oficial escolhem por `?channel=`:
+
+| `channel` | Número |
+| --- | --- |
+| `dispatch` | O número de disparo (lembretes e campanhas). **Padrão**, quando existe. |
+| `service` | O número de atendimento. Padrão quando a clínica só tem este. |
+
+`GET /numbers` lista os canais disponíveis e a saúde de cada um. Valor inválido é `400 ERR_INVALID_CHANNEL`; canal que a clínica não tem é `409 ERR_CHANNEL_NOT_CONFIGURED`.
