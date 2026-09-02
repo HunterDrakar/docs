@@ -9,22 +9,14 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
     "groups": [
       {
         "group": "Comece aqui",
         "pages": [
           "index",
           "autenticacao",
-          "erros"
+          "erros",
+          "agentes-de-ia"
         ]
       },
       {
