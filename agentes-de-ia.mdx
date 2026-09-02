@@ -1,0 +1,84 @@
+---
+title: "Para agentes de IA"
+description: "Como apontar o Claude, o ChatGPT, o Cursor ou qualquer agente de programação para esta documentação, e o contrato inteiro em quinze linhas."
+---
+
+Esta documentação é publicada em três formatos que uma LLM lê melhor do que HTML. Nenhum precisa ser configurado: os endereços abaixo já existem e acompanham cada atualização das páginas.
+
+## Endereços
+
+| Formato | Endereço | Quando usar |
+|---|---|---|
+| Índice | `https://elim-agenda.mintlify.app/llms.txt` | Para o agente navegar: lista cada página com uma linha de descrição e o link em Markdown. |
+| Doc inteira | `https://elim-agenda.mintlify.app/llms-full.txt` | Para colar no contexto de uma vez. Cabe com folga em qualquer modelo atual. |
+| Uma página | qualquer rota com `.md` no fim, por exemplo `https://elim-agenda.mintlify.app/erros.md` | Para trazer só o que interessa: a tabela de erros, o contrato de um endpoint. |
+
+O menu **Copy page** no alto de cada página faz o mesmo sem digitar: copia a página em Markdown ou abre direto no ChatGPT, no Claude, no Cursor ou no VS Code.
+
+## Servidor MCP
+
+A doc também é um servidor MCP. Conectado, o agente pesquisa a documentação sozinho durante a conversa, em vez de depender do que foi colado no início.
+
+```text
+https://elim-agenda.mintlify.app/mcp
+```
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add --transport http elim-docs https://elim-agenda.mintlify.app/mcp
+    ```
+  </Tab>
+  <Tab title="Cursor">
+    Em `.cursor/mcp.json` do projeto (ou nas configurações globais):
+
+    ```json
+    {
+      "mcpServers": {
+        "elim-docs": { "url": "https://elim-agenda.mintlify.app/mcp" }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="VS Code">
+    Em `.vscode/mcp.json`:
+
+    ```json
+    {
+      "servers": {
+        "elim-docs": { "type": "http", "url": "https://elim-agenda.mintlify.app/mcp" }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="ChatGPT e Claude (app)">
+    Adicione um conector personalizado com a URL acima. No ChatGPT fica em Configurações → Conectores; no Claude, em Configurações → Conectores → Adicionar conector personalizado.
+  </Tab>
+</Tabs>
+
+## O contrato em quinze linhas
+
+Se o agente for escrever a integração, dê a ele este bloco. É tudo o que precisa estar certo para o código funcionar de primeira; o resto da doc é detalhe.
+
+```text
+Base: https://www.elimagenda.com.br/api/v1/whatsapp — header Authorization: Bearer elim_live_... em toda chamada.
+1.  GET /templates?channel=dispatch|service → só templates APROVADOS; cada um traz variables[] com key e filled_by.
+2.  filled_by=server: o Elim preenche a partir do agendamento, NÃO envie. filled_by=client: obrigatória, você envia.
+3.  Destinatário VINCULADO = { appointment_id } (o phone é o do paciente; buttons funcionam). LIVRE = { phone, variables }.
+4.  Template com variável server ou supports_actions=true só aceita vinculado (422 ERR_TEMPLATE_REQUIRES_APPOINTMENT).
+5.  POST /messages { template, recipients[1..1000] } com header Idempotency-Key OBRIGATÓRIO (400 sem ele).
+6.  Mesma Idempotency-Key + mesmo corpo → 200 com o run existente. Corpo diferente → 409 ERR_IDEMPOTENCY_CONFLICT.
+7.  Validação é tudo-ou-nada: 422 com details[{index, code, field}] e nada é enviado.
+8.  202 { run_id, status: "accepted", total } significa ACEITO, não enviado. 1 run em processamento por clínica (409 ERR_RUN_IN_PROGRESS).
+9.  GET /runs/{run_id} a cada 15–30 s até status ∈ {completed, interrupted}. counts = {accepted, sent, delivered, read, failed}.
+10. sent = a Meta aceitou; delivered e read chegam DEPOIS, por horas. failed pode aparecer depois de sent.
+11. GET /runs/{run_id}/recipients?status=&limit=100&cursor= — cursor opaco, next_cursor null no fim, nunca offset.
+12. Cada destinatário: { phone, mode, status, error{code, meta_code}|null, sent_at, appointment{id, status, updated_at}|null, reply{button, clicked_at}|null }.
+13. reply.button ∈ {confirmar, reagendar, cancelar}; appointment.status é o status REAL no Elim e é o que vale.
+14. Erros: envelope { error: { code, message, details? } }; programe contra code, nunca contra message. 429 → respeite Retry-After.
+15. Limites: 120 req/min por chave (GET), 10/min no POST, 300/min por IP; run consultável por 60 dias; toda resposta é no-store.
+```
+
+<Tip>
+Depois que o agente gerar o código, teste contra a API de verdade com a chave da clínica e um único destinatário de teste antes de disparar em massa. A doc descreve o contrato; o `GET /numbers` e um `POST` de um destinatário provam que a chave, o canal e o template estão certos.
+</Tip>
