@@ -53,7 +53,7 @@ GET https://www.elimagenda.com.br/api/v1/whatsapp/runs/{run_id}/recipients?statu
 
       <Expandable title="error">
         <ResponseField name="code" type="string">
-          `ERR_META_REJECTED`, `ERR_CONTEXT_UNAVAILABLE` ou `ERR_INTERRUPTED`.
+          `ERR_META_REJECTED`, `ERR_CONTEXT_UNAVAILABLE`, `ERR_INTERRUPTED` ou `ERR_DELIVERY_UNCERTAIN`. Veja [erros por destinatário](/erros#erros-por-destinatario): `ERR_DELIVERY_UNCERTAIN` significa que a mensagem pode ter chegado, então não reenvie automaticamente.
         </ResponseField>
 
         <ResponseField name="meta_code" type="integer | null">

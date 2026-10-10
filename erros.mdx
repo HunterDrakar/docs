@@ -81,7 +81,8 @@ Estes não são respostas HTTP. Aparecem em `GET /runs/{run_id}/recipients`, no 
 | --- | --- |
 | `ERR_META_REJECTED` | A Meta recusou o envio para este número. `meta_code` traz o código da Meta (por exemplo `131026`, número sem WhatsApp, ou `131049`, a Meta limitou o volume de marketing para esse usuário). |
 | `ERR_CONTEXT_UNAVAILABLE` | O agendamento não tinha dado suficiente para montar a mensagem (paciente sem telefone, médico ou data ausentes). |
-| `ERR_INTERRUPTED` | O envio foi interrompido antes de a Meta responder e não pôde ser retomado com segurança. Não houve envio. |
+| `ERR_INTERRUPTED` | O disparo foi interrompido com este destinatário ainda na fila: o envio dele **não começou**. Pode enviar de novo em um disparo novo. |
+| `ERR_DELIVERY_UNCERTAIN` | A conexão com a Meta caiu **durante** o envio (sem resposta, tempo esgotado ou falha no meio) e não sabemos se a mensagem chegou. O paciente pode ter recebido. **Não reenvie automaticamente**: só reenvie se o paciente disser que não recebeu, para não mandar a mensagem em dobro. |
 
 ## Como tratar
 

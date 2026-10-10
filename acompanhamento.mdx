@@ -21,7 +21,7 @@ accepted ──► processing ──► completed
 | `accepted` | Gravado, o envio ainda não começou. Dura segundos. |
 | `processing` | Enviando. Os contadores mudam a cada consulta. |
 | `completed` | Todo destinatário tem desfecho: `sent` ou `failed`. **Não** significa entregue: entrega e leitura continuam chegando depois. |
-| `interrupted` | O Elim tentou retomar o envio 12 vezes e desistiu. Os destinatários que não saíram ficam `failed` com `ERR_INTERRUPTED`. Raro; indica um problema que o Elim precisa olhar. |
+| `interrupted` | O Elim tentou retomar o envio 12 vezes e desistiu. Os destinatários que ainda estavam na fila ficam `failed` com `ERR_INTERRUPTED` (não saíram); quem estava no meio do envio fica com `ERR_DELIVERY_UNCERTAIN` (pode ter saído). Raro; indica um problema que o Elim precisa olhar. |
 
 O campo `error` do run traz o último erro de infraestrutura visto durante o processamento (por exemplo, a Meta fora do ar). Ele pode estar preenchido num run `completed`: quer dizer que houve uma pausa e depois o envio seguiu.
 
@@ -100,7 +100,7 @@ Passe `next_cursor` em `?cursor=` para a próxima página. `next_cursor: null` �
     Consulte `GET /runs/{run_id}` a cada **15 a 30 segundos** até `status` sair de `accepted`/`processing`. Um run de 1.000 destinatários leva alguns minutos.
   </Step>
   <Step title="Falhas de envio">
-    Com `completed`, busque `GET /runs/{run_id}/recipients?status=failed` e trate os `error.code`. Isso é o que **não saiu**.
+    Com `completed`, busque `GET /runs/{run_id}/recipients?status=failed` e trate os `error.code`. Quase tudo ali **não saiu**; a exceção é `ERR_DELIVERY_UNCERTAIN`, que **pode ter chegado** ao paciente. Não reenvie esses automaticamente.
   </Step>
   <Step title="Entrega, leitura e respostas">
     Repita `GET /runs/{run_id}` numa cadência mais lenta (a cada 5 a 15 minutos) enquanto os contadores `delivered`/`read` ainda estiverem subindo, e pagine `recipients` quando precisar das respostas. A maior parte das respostas de botão chega na primeira hora; lembretes enviados na véspera recebem toques até o dia da consulta.
