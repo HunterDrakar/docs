@@ -65,7 +65,7 @@ Leia [Feed de eventos](/eventos) antes: o ciclo de leitura, as garantias do curs
 </ResponseField>
 
 <ResponseField name="next_cursor" type="string | null">
-  Passe em `?after=` na próxima leitura. Vem sempre que a página teve pelo menos um evento. Em página vazia, é o mesmo cursor recebido em `after`; sem `after` e sem evento, `null`.
+  Passe em `?after=` na próxima leitura. Vem sempre que a página teve pelo menos um evento. Em página vazia, é a mesma posição recebida em `after`, com a validade renovada (grave-o: é o que impede o cursor de expirar num feed parado); sem `after` e sem evento, `null`.
 </ResponseField>
 
 <ResponseField name="has_more" type="boolean">

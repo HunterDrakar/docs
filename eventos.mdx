@@ -50,7 +50,7 @@ async function drainFeed() {
 ### Regras do cursor
 
 - **`next_cursor` vem sempre que a página teve pelo menos um evento**, mesmo que ela não esteja cheia. É dele que a próxima leitura continua.
-- **Página vazia devolve o mesmo cursor** que você mandou em `after`. Pode gravá-lo de novo sem medo. Sem `after` e sem evento, `next_cursor` é `null`.
+- **Página vazia devolve a mesma posição** que você mandou em `after`, com a validade renovada. Grave o `next_cursor` devolvido mesmo quando não houve evento: é ele que mantém o cursor válido num feed parado. Sem `after` e sem evento, `next_cursor` é `null`.
 - **`has_more: true`** quer dizer que já existem mais eventos prontos além desta página.
 - O cursor é **opaco**: não interprete, não monte, não compare dois cursores. Ele pode mudar de formato. Cursor que não foi devolvido pelo Elim é `400 ERR_INVALID_REQUEST`.
 - `types` filtra por tipo, separado por vírgula (`?types=appointment.status_changed,lead.created`). O cursor continua valendo com ou sem filtro. Tipo desconhecido é `400`; tipo cujo escopo a chave não tem é `403 ERR_SCOPE_MISSING`.
@@ -69,7 +69,7 @@ async function drainFeed() {
 
 O Elim guarda os eventos por **7 dias**. Depois disso eles são apagados.
 
-Um cursor que aponta para um evento com mais de 7 dias responde `410` com `ERR_CURSOR_EXPIRED`: os eventos entre ele e o mais antigo guardado podem ter sido apagados, e o Elim não tem como saber se você perdeu algo. Isso acontece quando o seu sistema fica mais de 7 dias sem ler, e também quando o feed da clínica fica 7 dias sem nenhum evento novo para a sua chave (o cursor não anda).
+Um cursor que aponta para um evento com mais de 7 dias responde `410` com `ERR_CURSOR_EXPIRED`: os eventos entre ele e o mais antigo guardado podem ter sido apagados, e o Elim não tem como saber se você perdeu algo. Isso acontece quando o seu sistema fica mais de 7 dias sem ler. Um feed **parado** não expira o cursor, desde que você continue lendo e gravando o `next_cursor` de cada resposta, inclusive das vazias.
 
 Quando receber `410`:
 

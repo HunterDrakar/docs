@@ -36,7 +36,7 @@ Os escopos que exigem essa declaração são os de dado de paciente: `events:mes
   **Etiquetas costumam revelar condição de saúde** ("Dor crônica", "Gestante"). Por isso `events:tags` é um escopo separado, que a clínica só deve marcar se tiver o consentimento dos pacientes. Pelo mesmo motivo, atendentes, departamentos e etiquetas aparecem nos eventos **só por id**: os nomes da equipe e dos departamentos vêm de [`GET /attendants`](/referencia/attendants).
 </Warning>
 
-Toda chave nasce com `whatsapp` marcado, e as chaves criadas antes dos escopos existirem continuam assim: nada muda para quem já faz disparos. As rotas de disparo (`/whatsapp/templates`, `/whatsapp/numbers`, `/whatsapp/messages`, `/whatsapp/runs`) não exigem escopo e funcionam com qualquer chave ativa da clínica.
+Toda chave nasce com `whatsapp` marcado, e as chaves criadas antes dos escopos existirem continuam assim: nada muda para quem já faz disparos. As rotas de disparo (`/whatsapp/templates`, `/whatsapp/numbers`, `/whatsapp/messages`, `/whatsapp/runs`) exigem o escopo `whatsapp`: desmarcar **Disparos** na aba API desliga o envio por aquela chave (`403 ERR_SCOPE_MISSING`).
 
 ## Escopos exigidos em conjunto
 
@@ -67,7 +67,7 @@ Não é a mesma coisa que `ERR_FEATURE_DISABLED`: a API está liberada para a cl
 
 ## Oposição e anonimização são sempre entregues
 
-Toda chave que recebe eventos (qualquer `events:*` ou `whatsapp`) recebe também, sem precisar de escopo próprio:
+Toda chave que recebe eventos (qualquer `events:*` ou `whatsapp`) **ou que lê dado de paciente** (`appointments:read`, `conversations:read`, `patients:write`, `scheduling:write`) recebe também, sem precisar de escopo próprio, e pode ler `GET /events` só para eles:
 
 - **`contact.opted_out`**: o contato pediu à clínica para não receber mais mensagens. Pare de enviar mensagens a esse telefone em nome da clínica.
 - **`patient.anonymized`**: a clínica anonimizou o paciente, por pedido do titular ou por fim de tratamento. **Apague** do seu sistema os dados desse paciente e desse telefone.
