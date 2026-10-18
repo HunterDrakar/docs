@@ -1,0 +1,117 @@
+---
+title: "GET /appointments"
+sidebarTitle: "GET /appointments"
+description: "Consultas da clínica alteradas desde um instante, com o telefone do paciente. Para a carga inicial e para refazer o estado depois de um 410 do feed."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/appointments?updated_since=2026-10-13T00:00:00-03:00&limit=100&cursor={cursor}
+```
+
+Use esta rota para montar o estado inicial da agenda no seu sistema antes de começar a ler o [feed](/eventos), e para reconstruir o estado quando o feed responder [`410 ERR_CURSOR_EXPIRED`](/eventos#retencao-e-cursor-expirado). No dia a dia, as mudanças chegam pelo evento `appointment.status_changed`.
+
+**Escopos:** `appointments:read` **e** `events:appointments`, os dois. A listagem expõe a agenda inteira, a mesma informação do feed de consultas. Veja [Escopos exigidos em conjunto](/escopos#escopos-exigidos-em-conjunto).
+
+**Limite:** 60 requisições por minuto por chave.
+
+Cada página com resultado fica registrada no Elim (quais consultas foram lidas pela chave).
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField query="updated_since" type="string (ISO 8601)" required>
+  Devolve as consultas com última alteração **a partir** deste instante, por exemplo `2026-10-13T00:00:00-03:00`. Ausente ou ilegível é `400 ERR_INVALID_REQUEST`.
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  O `next_cursor` da página anterior. Opaco. Cursor ilegível é `400 ERR_INVALID_REQUEST`. Mantenha o mesmo `updated_since` em todas as páginas.
+</ParamField>
+
+<ParamField query="limit" default="100" type="integer">
+  De 1 a 500. Valores fora da faixa são ajustados para o limite.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Consultas em ordem de última alteração, da mais antiga para a mais recente. A ordem é estável: nenhuma consulta se repete nem some na fronteira entre páginas.
+
+  <Expandable title="consulta">
+    <ResponseField name="id" type="string (uuid)">
+      Id da consulta no Elim. É o `appointment_id` dos eventos e dos disparos vinculados.
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      `agendado`, `confirmado`, `cancelado`, `reagendado`, `pendente`, `compareceu` ou `faltou`.
+    </ResponseField>
+
+    <ResponseField name="unscheduled" type="boolean">
+      `true` quando a consulta foi desmarcada (saiu da agenda; o `status` fica `cancelado`).
+    </ResponseField>
+
+    <ResponseField name="scheduled_for" type="string | null">
+      Data e hora da consulta em ISO 8601 com o fuso de Brasília, por exemplo `2026-10-21T09:30:00-03:00`.
+    </ResponseField>
+
+    <ResponseField name="updated_at" type="string (ISO 8601)">
+      Última alteração da consulta, por qualquer caminho, em UTC.
+    </ResponseField>
+
+    <ResponseField name="phone" type="string | null">
+      Telefone do paciente em dígitos com `55`. `null` se o paciente não tem telefone.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="next_cursor" type="string | null">
+  Passe em `?cursor=` para a próxima página. `null` no fim.
+</ResponseField>
+
+<ResponseField name="has_more" type="boolean">
+  `true` quando há outra página.
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    {
+      "id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2",
+      "status": "confirmado",
+      "unscheduled": false,
+      "scheduled_for": "2026-10-21T09:30:00-03:00",
+      "updated_at": "2026-10-20T14:03:11.204Z",
+      "phone": "5511987654321"
+    },
+    {
+      "id": "9c2b7a10-4f0e-4c3d-8a1b-2d5e6f7a8b9c",
+      "status": "cancelado",
+      "unscheduled": true,
+      "scheduled_for": "2026-10-22T15:00:00-03:00",
+      "updated_at": "2026-10-20T16:40:02.518Z",
+      "phone": "5511912345678"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: `updated_since` ausente ou ilegível, ou `cursor` ilegível |
+| `403` | `ERR_SCOPE_MISSING`: falta `appointments:read` ou `events:appointments` |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).
+
+<Tip>
+  Para conciliar com o feed depois de um `410`, use como `updated_since` um instante um pouco **anterior** ao último evento que você processou. Rever algumas consultas que você já conhecia é inofensivo; deixar uma de fora não é.
+</Tip>

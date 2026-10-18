@@ -1,35 +1,64 @@
 ---
 title: "Introdução"
-description: "O que a API Pública do Elim faz, o que ela não faz, e o caminho mais curto até o primeiro disparo."
+description: "O que a API Pública do Elim faz, o que ela não faz, e o caminho mais curto até o primeiro disparo e a primeira leitura do feed de eventos."
 ---
 
-A API Pública do Elim permite que o sistema da sua clínica dispare **templates de WhatsApp aprovados pela Meta** para os pacientes e acompanhe o resultado: envio, entrega, leitura e o botão que o paciente tocou.
+A API Pública do Elim liga o sistema da sua clínica (ou o CRM que ela usa) ao Elim em duas direções:
 
-Ela usa o mesmo número e os mesmos templates que a clínica já configurou no Elim. Nada precisa ser cadastrado de novo: o que aparece na tela do Elim é o que a API enxerga.
+- **Disparos de WhatsApp.** Envie **templates aprovados pela Meta** para os pacientes e acompanhe o resultado: envio, entrega, leitura e o botão que o paciente tocou.
+- **Eventos e agenda.** Saiba o que acontece na clínica sem ninguém digitar nada duas vezes: quem respondeu no WhatsApp, quem atende cada conversa, consulta marcada, confirmada, desmarcada, compareceu ou faltou, lead novo vindo de anúncio. E, no sentido contrário, cadastre pacientes e gere links pessoais de auto-agendamento.
+
+Ela usa o mesmo número, os mesmos templates e a mesma agenda que a clínica já tem no Elim. Nada precisa ser cadastrado de novo: o que aparece na tela do Elim é o que a API enxerga.
 
 ## O que dá para fazer
 
+### Disparos
+
 | Endpoint | Para quê |
 | --- | --- |
-| [`GET /templates`](/referencia/templates) | Listar os templates aprovados e o contrato de variáveis de cada um |
-| [`GET /numbers`](/referencia/numeros) | Ver os números da clínica e se a Meta está aceitando envios por eles |
-| [`POST /messages`](/referencia/messages) | Disparar um template para até 1.000 destinatários de uma vez |
-| [`GET /runs/{run_id}`](/referencia/runs) | Acompanhar o disparo com contadores por status |
-| [`GET /runs/{run_id}/recipients`](/referencia/run-recipients) | Ver destinatário a destinatário: status, erro, agendamento e resposta de botão |
+| [`GET /whatsapp/templates`](/referencia/templates) | Listar os templates aprovados e o contrato de variáveis de cada um |
+| [`GET /whatsapp/numbers`](/referencia/numeros) | Ver os números da clínica e se a Meta está aceitando envios por eles |
+| [`POST /whatsapp/messages`](/referencia/messages) | Disparar um template para até 1.000 destinatários de uma vez |
+| [`GET /whatsapp/runs/{run_id}`](/referencia/runs) | Acompanhar o disparo com contadores por status |
+| [`GET /whatsapp/runs/{run_id}/recipients`](/referencia/run-recipients) | Ver destinatário a destinatário: status, erro, agendamento e resposta de botão |
+
+### Eventos e estado
+
+| Endpoint | Para quê |
+| --- | --- |
+| [`GET /events`](/referencia/events) | O [feed de eventos](/eventos): mensagens, conversas, consultas, leads, conta WhatsApp, oposição e anonimização |
+| [`GET /appointments`](/referencia/appointments) | Consultas alteradas desde um instante, para a carga inicial |
+| [`POST /appointments/search`](/referencia/appointments-search) | As consultas de um telefone |
+| [`POST /whatsapp/conversations/search`](/referencia/conversations-search) | Quem atende a conversa de um telefone, se ela está aberta e de qual anúncio veio |
+| [`GET /attendants`](/referencia/attendants) | A equipe, para traduzir os ids de atendente e departamento dos eventos |
+| [`GET /doctors`](/referencia/doctors) e [`GET /availability`](/referencia/availability) | Profissionais e horários livres para agendamento online |
+
+### Ações
+
+| Endpoint | Para quê |
+| --- | --- |
+| [`POST /patients`](/referencia/patients) | Cadastrar um paciente, ou reconhecer o cadastro que já existe |
+| [`POST /scheduling-links`](/referencia/scheduling-links) | Gerar um link pessoal de auto-agendamento, sem dado pessoal na URL |
+
+Cada rota exige um escopo que a clínica libera na aba API. Veja [Escopos e compartilhamento](/escopos).
 
 ## O que fica de fora nesta versão
 
-- **Webhook para o seu sistema.** As respostas chegam por consulta (`GET /runs`), não por push. Faça polling.
+- **Conteúdo de mensagem.** Os eventos dizem que uma mensagem chegou ou saiu, de quem e por qual número, mas nunca o texto.
+- **Push de dados.** Os eventos são lidos pelo feed com cursor. O [aviso de evento novo](/aviso) só avisa que há o que ler; ele não leva dado.
+- **Atribuir atendente ou mexer na conversa.** A API lê quem atende, mas não muda.
 - **Criar ou editar templates.** Templates passam pela aprovação da Meta e são gerenciados dentro do Elim.
-- **Texto livre.** Só templates aprovados. A janela de 24 horas de conversa não é exposta pela API.
+- **Texto livre no WhatsApp.** Só templates aprovados.
 
 ## Endereço base
 
 ```text
-https://www.elimagenda.com.br/api/v1/whatsapp
+https://www.elimagenda.com.br/api/v1
 ```
 
-Todas as rotas desta documentação são relativas a esse endereço. Toda resposta vem com `Cache-Control: no-store`: nunca guarde uma resposta em cache intermediário.
+Todas as rotas desta documentação são relativas a esse endereço: `GET /events` é `https://www.elimagenda.com.br/api/v1/events`, e `GET /whatsapp/templates` é `https://www.elimagenda.com.br/api/v1/whatsapp/templates`. Nas páginas de [Disparos](/disparos) e [Acompanhamento](/acompanhamento), as rotas aparecem abreviadas (`GET /templates`, `POST /messages`, `GET /runs/{run_id}`): todas ficam em `/whatsapp`.
+
+Toda resposta vem com `Cache-Control: no-store`: nunca guarde uma resposta em cache intermediário.
 
 ## Do zero ao primeiro disparo
 
@@ -37,8 +66,8 @@ Todas as rotas desta documentação são relativas a esse endereço. Toda respos
   <Step title="Peça a habilitação">
     A API é liberada por clínica pela equipe do Elim. Quando estiver ativa, a aba **API** aparece em **Configurações**.
   </Step>
-  <Step title="Gere a chave">
-    Em Configurações → API, gere a chave. Ela é exibida **uma única vez**. Guarde num cofre de segredos, nunca no código-fonte. Veja [Autenticação](/autenticacao).
+  <Step title="Gere a chave e marque os escopos">
+    Em Configurações → API, a clínica gera a chave e marca os [escopos](/escopos) que a integração precisa. A chave é exibida **uma única vez**. Guarde num cofre de segredos, nunca no código-fonte. Veja [Autenticação](/autenticacao).
   </Step>
   <Step title="Descubra o template e o número">
     Chame `GET /templates` para ver os templates aprovados e o que cada um espera de você, e `GET /numbers` para confirmar que o número está liberado pela Meta.
@@ -76,6 +105,29 @@ curl -s https://www.elimagenda.com.br/api/v1/whatsapp/runs/673e92bb-3531-4218-a2
   -H "Authorization: Bearer $ELIM_API_KEY"
 ```
 
+## Do zero ao feed de eventos
+
+<Steps>
+  <Step title="Peça os escopos de evento">
+    A clínica marca, na aba API, os escopos dos eventos que você quer receber (por exemplo `events:appointments` e `events:messages`) e declara quem recebe os dados. Veja [Escopos](/escopos).
+  </Step>
+  <Step title="Faça a carga inicial">
+    O feed só tem o que aconteceu depois que o escopo foi marcado. Carregue o estado atual pelas rotas de estado, como `GET /appointments?updated_since=` e `GET /attendants`.
+  </Step>
+  <Step title="Leia o feed">
+    Chame `GET /events` sem cursor, processe, guarde o `next_cursor` e continue dele. Veja [Feed de eventos](/eventos).
+  </Step>
+  <Step title="Opcional: cadastre o aviso">
+    Para não ficar consultando sem necessidade, peça à clínica que cadastre na aba API um endereço seu, que recebe um aviso assinado quando há evento novo. Veja [Aviso de evento novo](/aviso).
+  </Step>
+</Steps>
+
+```bash
+curl -s "https://www.elimagenda.com.br/api/v1/events?limit=100" \
+  -H "Authorization: Bearer $ELIM_API_KEY"
+# → 200 { "data": [ … ], "next_cursor": "MTIz…", "has_more": false }
+```
+
 ## Limites
 
 | Limite | Valor |
@@ -84,7 +136,10 @@ curl -s https://www.elimagenda.com.br/api/v1/whatsapp/runs/673e92bb-3531-4218-a2
 | Disparos em processamento por clínica | 1 por vez |
 | Chaves ativas por clínica | 1 |
 | Retenção dos disparos para consulta | 60 dias |
-| Requisições de leitura | 120 por minuto por chave |
-| `POST /messages` | 10 por minuto por chave |
+| Retenção dos eventos no feed | 7 dias |
+| Requisições de leitura de disparos | 120 por minuto por chave |
+| `POST /whatsapp/messages` | 10 por minuto por chave |
+| `GET /events` | 60 por minuto por chave |
+| Demais rotas | 60 ou 120 por minuto por chave (veja [Autenticação](/autenticacao#limites-de-requisicao)) |
 
 Os limites de requisição são um freio contra abuso, não uma cota contratual. Se receber `429`, respeite o header `Retry-After`.

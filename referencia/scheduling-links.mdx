@@ -1,0 +1,102 @@
+---
+title: "POST /scheduling-links"
+sidebarTitle: "POST /scheduling-links"
+description: "Gera um link pessoal de auto-agendamento para um paciente: válido por 72 horas, de uso único, sem dado pessoal na URL."
+---
+
+```http
+POST https://www.elimagenda.com.br/api/v1/scheduling-links
+```
+
+O link abre a página de auto-agendamento da clínica já preenchida com o nome e o telefone que você enviou. Mande o link ao paciente pelo seu canal (WhatsApp, e-mail, SMS) e ele escolhe profissional, dia e horário.
+
+**Escopo:** `scheduling:write`.
+
+**Limite:** 60 requisições por minuto por chave.
+
+A clínica precisa ter o **auto-agendamento** ligado no Elim, com o endereço público configurado. Sem isso, `422 ERR_SCHEDULING_DISABLED`.
+
+## Como o link funciona
+
+- **Válido por 72 horas** a partir da criação (`expires_at`).
+- **Uso único**: vale para um agendamento. Depois de usado, não pré-preenche mais nada.
+- **Sem dado pessoal na URL.** O link leva só um código opaco (`?t=…`). Nome e telefone ficam guardados no Elim e são lidos pela página no servidor. Um link encaminhado, vazado num log ou aberto por outra pessoa não expõe o telefone do paciente.
+- Se o paciente for anonimizado antes de usar o link, o link deixa de valer.
+
+## O que o paciente vê
+
+1. A página de auto-agendamento da clínica, com o **nome já preenchido** (se você enviou `name`).
+2. O telefone aparece **mascarado**, como `(11) *****-4321`, com a pergunta **"Este é o seu WhatsApp?"**. O paciente confirma, ou escolhe usar outro número e digita.
+3. A autorização de uso dos dados vem **desmarcada**: o próprio paciente marca.
+4. Escolhe profissional, dia e horário, e conclui. A consulta entra na agenda do Elim como qualquer auto-agendamento, e você a vê pelo evento `appointment.status_changed`.
+
+Link vencido ou já usado não quebra a página: o paciente vê o aviso **"Este link expirou ou já foi usado. Preencha seus dados para agendar."** e pode agendar normalmente, digitando os dados.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  `application/json`
+</ParamField>
+
+## Corpo
+
+<ParamField body="phone" type="string" required>
+  Telefone do paciente em qualquer formato brasileiro. Telefone que não puder ser normalizado é `422 ERR_INVALID_PHONE`.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Nome para pré-preencher, de 1 a 120 caracteres. Opcional: sem ele, o paciente digita o nome.
+</ParamField>
+
+## Resposta `201`
+
+<ResponseField name="data" type="object">
+  <Expandable title="data">
+    <ResponseField name="url" type="string">
+      O link pessoal, na forma `https://www.elimagenda.com.br/agendar/<clínica>?t=<código>`. Envie como está; não acrescente parâmetros com nome ou telefone.
+    </ResponseField>
+
+    <ResponseField name="expires_at" type="string (ISO 8601)">
+      Até quando o link vale, em UTC.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+
+```bash
+curl -s -X POST https://www.elimagenda.com.br/api/v1/scheduling-links \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "phone": "5511987654321", "name": "Maria Souza" }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201
+{
+  "data": {
+    "url": "https://www.elimagenda.com.br/agendar/clinica-exemplo?t=6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    "expires_at": "2026-10-23T14:00:00.000Z"
+  }
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: corpo que não é JSON, `phone` ausente, `name` vazio ou com mais de 120 caracteres |
+| `403` | `ERR_SCOPE_MISSING`: falta `scheduling:write` |
+| `422` | `ERR_INVALID_PHONE`: telefone que não pôde ser normalizado |
+| `422` | `ERR_SCHEDULING_DISABLED`: a clínica não tem o auto-agendamento ligado, ou não tem endereço público configurado. Fale com a clínica |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

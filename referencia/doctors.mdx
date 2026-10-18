@@ -1,0 +1,62 @@
+---
+title: "GET /doctors"
+sidebarTitle: "GET /doctors"
+description: "Os profissionais ativos da clínica e se cada um aceita agendamento online. Para escolher o doctor_id de GET /availability."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/doctors
+```
+
+**Escopo:** `availability:read`.
+
+**Limite:** 60 requisições por minuto por chave.
+
+Só três campos saem: o nome é o mesmo que a página pública de auto-agendamento já mostra a qualquer visitante. Especialidade, registro profissional e contato ficam de fora.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Profissionais ativos, em ordem de nome.
+
+  <Expandable title="profissional">
+    <ResponseField name="id" type="string (uuid)">
+      Id do profissional. É o `doctor_id` de [`GET /availability`](/referencia/availability).
+    </ResponseField>
+
+    <ResponseField name="name" type="string">
+      Nome do profissional.
+    </ResponseField>
+
+    <ResponseField name="accepts_online_scheduling" type="boolean">
+      `true` quando o profissional aceita agendamento online. Só esses têm horários em `GET /availability`; os outros respondem `404 ERR_DOCTOR_NOT_FOUND` lá.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    { "id": "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f5a", "name": "Dra. Ana Lima", "accepts_online_scheduling": true },
+    { "id": "e2f3a4b5-c6d7-4e8f-9a0b-1c2d3e4f5a6b", "name": "Dr. Bruno Reis", "accepts_online_scheduling": false }
+  ]
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `403` | `ERR_SCOPE_MISSING`: falta `availability:read` |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

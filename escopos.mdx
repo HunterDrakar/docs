@@ -1,0 +1,84 @@
+---
+title: "Escopos e compartilhamento"
+sidebarTitle: "Escopos"
+description: "O que cada escopo da chave libera, quem decide o que é compartilhado, e o que acontece quando falta um escopo."
+---
+
+A chave identifica a clínica; os **escopos** dizem o que essa chave pode ver e fazer. Cada rota exige um ou mais escopos, e cada tipo de evento do [feed](/eventos) pertence a um escopo.
+
+## Quem marca os escopos
+
+Os escopos são marcados **pela clínica**, em **Configurações → API**, por quem administra a conta da clínica no Elim. Você, integrador, não escolhe escopos pela API: peça à clínica que marque o que a sua integração precisa.
+
+A clínica é a controladora dos dados dos pacientes. Antes de liberar qualquer escopo que entregue dado de paciente, a tela pede que ela declare **quem recebe os dados**: o sistema, a empresa e o CNPJ, a finalidade, a base legal, o contato do encarregado e o país onde os dados ficam, além de uma confirmação de responsabilidade. Cada mudança de escopo fica registrada no Elim com o antes e o depois.
+
+Os escopos que exigem essa declaração são os de dado de paciente: `events:messages`, `events:conversations`, `events:tags`, `events:appointments`, `events:leads`, `appointments:read`, `conversations:read`, `patients:write` e `scheduling:write`.
+
+## Os escopos
+
+| Escopo | Nome na tela | O que libera |
+| --- | --- | --- |
+| `whatsapp` | Disparos | Envio de templates pela API e o status de entrega de cada mensagem enviada. No feed, o evento `message.status`. |
+| `events:messages` | Mensagens | Telefone do contato e horário de cada mensagem recebida ou enviada, a origem do envio e qual atendente respondeu. Não inclui o texto das mensagens. Eventos `message.received` e `message.sent`. |
+| `events:conversations` | Conversas | Telefone do contato, atendente e departamento responsáveis e quando a conversa foi encerrada. Eventos `conversation.assigned` e `conversation.finished`. |
+| `events:tags` | Etiquetas | Etiquetas colocadas ou retiradas das conversas, com o telefone. Eventos `tag.added` e `tag.removed`, e o campo `tag_ids` da [busca de conversa](/referencia/conversations-search). |
+| `events:appointments` | Consultas | Telefone do paciente e cada mudança de status da consulta, com data e hora, e os pedidos de remarcar ou cancelar. Não inclui médico nem procedimento. Eventos `appointment.*`. |
+| `events:leads` | Leads | Telefone de quem escreveu pela primeira vez e se veio de anúncio da Meta. O nome só é enviado se a clínica ativou isso no encaminhamento de leads. Evento `lead.created`. |
+| `events:account` | Conta WhatsApp | Qualidade do número e aprovação de templates. Não envolve dados de pacientes. Eventos `number.health_changed` e `template.status_changed`. |
+| `attendants:read` | Equipe | Nome, função e departamentos dos funcionários ativos da clínica. [`GET /attendants`](/referencia/attendants). |
+| `appointments:read` | Consultar agenda | Buscar as consultas de um telefone específico. Cada busca fica registrada. [`POST /appointments/search`](/referencia/appointments-search). |
+| `conversations:read` | Consultar conversa | Ver, para um telefone, quem atende, se a conversa está aberta e de qual anúncio veio. Cada busca fica registrada. [`POST /whatsapp/conversations/search`](/referencia/conversations-search). |
+| `availability:read` | Horários livres | Profissionais que aceitam agendamento online e seus horários vagos. Não envolve dados de pacientes. [`GET /doctors`](/referencia/doctors) e [`GET /availability`](/referencia/availability). |
+| `patients:write` | Cadastrar paciente | Criar paciente com nome e telefone a partir do seu sistema. Cadastros existentes nunca são alterados. [`POST /patients`](/referencia/patients). |
+| `scheduling:write` | Link de agendamento | Gerar um link pessoal de auto-agendamento que expira em 72 horas. O paciente confirma os próprios dados ao abrir. [`POST /scheduling-links`](/referencia/scheduling-links). |
+
+<Warning>
+  **Etiquetas costumam revelar condição de saúde** ("Dor crônica", "Gestante"). Por isso `events:tags` é um escopo separado, que a clínica só deve marcar se tiver o consentimento dos pacientes. Pelo mesmo motivo, atendentes, departamentos e etiquetas aparecem nos eventos **só por id**: os nomes da equipe e dos departamentos vêm de [`GET /attendants`](/referencia/attendants).
+</Warning>
+
+Toda chave nasce com `whatsapp` marcado, e as chaves criadas antes dos escopos existirem continuam assim: nada muda para quem já faz disparos. As rotas de disparo (`/whatsapp/templates`, `/whatsapp/numbers`, `/whatsapp/messages`, `/whatsapp/runs`) exigem o escopo `whatsapp`: desmarcar **Disparos** na aba API desliga o envio por aquela chave (`403 ERR_SCOPE_MISSING`).
+
+## Escopos exigidos em conjunto
+
+Quando uma rota pede mais de um escopo, a chave precisa ter **todos**. Hoje isso acontece em uma rota:
+
+| Rota | Escopos exigidos |
+| --- | --- |
+| [`GET /appointments`](/referencia/appointments) | `appointments:read` **e** `events:appointments` |
+
+A listagem devolve a agenda inteira com o telefone de cada paciente, a mesma exposição do feed de consultas. Com só `appointments:read`, a chave consegue buscar um telefone por vez, mas não listar a agenda.
+
+O caso inverso é o feed: [`GET /events`](/referencia/events) exige **pelo menos um** escopo de evento (`whatsapp` ou qualquer `events:*`) e devolve só os tipos cobertos pelos escopos da chave.
+
+## Quando falta um escopo
+
+A resposta é `403` com `ERR_SCOPE_MISSING`:
+
+```json
+{
+  "error": {
+    "code": "ERR_SCOPE_MISSING",
+    "message": "Esta chave não tem permissão para este recurso. Marque o escopo na aba API das Configurações."
+  }
+}
+```
+
+Não é a mesma coisa que `ERR_FEATURE_DISABLED`: a API está liberada para a clínica, só falta marcar o escopo. O remédio é a clínica marcar o escopo na aba API; repetir a chamada não resolve. No feed, pedir em `types` um tipo cujo escopo a chave não tem também é `403 ERR_SCOPE_MISSING`, e não uma lista vazia, para que "sem permissão" nunca pareça "nada aconteceu".
+
+## Oposição e anonimização são sempre entregues
+
+Toda chave que recebe eventos (qualquer `events:*` ou `whatsapp`) **ou que lê dado de paciente** (`appointments:read`, `conversations:read`, `patients:write`, `scheduling:write`) recebe também, sem precisar de escopo próprio, e pode ler `GET /events` só para eles:
+
+- **`contact.opted_out`**: o contato pediu à clínica para não receber mais mensagens. Pare de enviar mensagens a esse telefone em nome da clínica.
+- **`patient.anonymized`**: a clínica anonimizou o paciente, por pedido do titular ou por fim de tratamento. **Apague** do seu sistema os dados desse paciente e desse telefone.
+
+Esses dois eventos existem para que o seu sistema cumpra o mesmo que o Elim cumpre. Veja [Feed de eventos](/eventos#eventos-que-exigem-acao).
+
+Além disso, se o titular se opôs ao compartilhamento dos dados com sistemas externos, o telefone dele **não gera evento nenhum** no feed, exceto esses dois.
+
+## O que muda quando a clínica mexe nos escopos
+
+- **Marcar um escopo** passa a gerar eventos daquela família **a partir desse momento**. O feed não reconstrói o passado: para a carga inicial use as rotas de estado, como [`GET /appointments`](/referencia/appointments).
+- **Desmarcar um escopo** apaga do feed os eventos daquela família que ainda não expiraram. As rotas daquele escopo passam a responder `403 ERR_SCOPE_MISSING`.
+- **Revogar a chave** apaga do feed todos os eventos da clínica.
+- **Regenerar a chave** mantém os escopos e a declaração do destinatário: a chave nova herda tudo da anterior, e o feed continua de onde estava. Só o valor da chave muda (veja [Autenticação](/autenticacao)).

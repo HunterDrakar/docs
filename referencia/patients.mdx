@@ -1,0 +1,117 @@
+---
+title: "POST /patients"
+sidebarTitle: "POST /patients"
+description: "Cria o cadastro de um paciente com nome e telefone, ou reconhece o que já existe. Nunca altera um cadastro."
+---
+
+```http
+POST https://www.elimagenda.com.br/api/v1/patients
+```
+
+Use para ter um `patient_id` do Elim a partir do seu sistema, por exemplo quando um lead vira paciente.
+
+**Escopo:** `patients:write`.
+
+**Limite:** 60 requisições por minuto por chave.
+
+## Como o Elim decide
+
+O Elim procura cadastros **ativos** da clínica com o mesmo telefone (pelos últimos dígitos, com ou sem o nono dígito) e confere o nome:
+
+| O que encontrou | Resposta |
+| --- | --- |
+| Nenhum cadastro com o telefone | Cria o paciente: `201` com `created: true` |
+| Um cadastro, com nome compatível | Devolve o cadastro existente **sem alterar nada**: `200` com `created: false` |
+| Vários cadastros, ou um com nome diferente | `409 ERR_PATIENT_AMBIGUOUS`. Nada é criado nem vinculado |
+
+Nome compatível é o nome igual, ou o mesmo primeiro nome e o mesmo último sobrenome, ignorando acentos e maiúsculas: "Maria Souza" reconhece "Maria Aparecida de Souza".
+
+- **Nenhum cadastro existente é alterado.** Se o nome ou o telefone no seu sistema estiver diferente do Elim, o Elim mantém o dele.
+- **O `409` não revela nada.** Ele não diz quantos cadastros existem nem o nome deles. A clínica confere o cadastro no Elim.
+- **Cadastro feito pela API fica fora dos disparos de template em massa** que a clínica faz no Elim, porque a clínica não registrou base para marketing com esse paciente. Lembretes de consulta funcionam normalmente.
+- O telefone é gravado no mesmo formato de um cadastro feito pela tela do Elim.
+
+## Repetição e concorrência
+
+Não há `Idempotency-Key` nesta rota: a própria regra acima resolve a repetição. Se a resposta se perder e você repetir o mesmo `POST`, a segunda chamada encontra o cadastro criado pela primeira e responde `200` com o mesmo `id`.
+
+<Warning>
+  **Dois `POST` simultâneos com o mesmo telefone novo podem criar dois cadastros**, porque os dois procuram antes de qualquer um gravar. A partir daí, chamadas com esse telefone respondem `409 ERR_PATIENT_AMBIGUOUS` até a clínica juntar os cadastros. Para evitar, não envie em paralelo o mesmo telefone: serialize as chamadas por telefone no seu sistema.
+</Warning>
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  `application/json`
+</ParamField>
+
+## Corpo
+
+<ParamField body="name" type="string" required>
+  Nome do paciente, de 2 a 120 caracteres (espaços nas pontas são removidos).
+</ParamField>
+
+<ParamField body="phone" type="string" required>
+  Telefone em qualquer formato brasileiro. Telefone que não puder ser normalizado é `422 ERR_INVALID_PHONE`.
+</ParamField>
+
+## Resposta `201` ou `200`
+
+<ResponseField name="data" type="object">
+  <Expandable title="data">
+    <ResponseField name="id" type="string (uuid)">
+      Id do paciente no Elim.
+    </ResponseField>
+
+    <ResponseField name="created" type="boolean">
+      `true` quando o cadastro foi criado agora (`201`); `false` quando já existia (`200`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+
+```bash
+curl -s -X POST https://www.elimagenda.com.br/api/v1/patients \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Maria Souza", "phone": "+55 11 98765-4321" }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201
+{ "data": { "id": "0d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a", "created": true } }
+```
+
+```json 200
+{ "data": { "id": "0d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a", "created": false } }
+```
+
+```json 409
+{
+  "error": {
+    "code": "ERR_PATIENT_AMBIGUOUS",
+    "message": "Já existe cadastro com este telefone e não foi possível confirmar que é a mesma pessoa. A clínica precisa conferir o cadastro no Elim."
+  }
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: corpo que não é JSON, `name` ausente ou fora de 2 a 120 caracteres, `phone` ausente |
+| `403` | `ERR_SCOPE_MISSING`: falta `patients:write` |
+| `409` | `ERR_PATIENT_AMBIGUOUS`: não é possível confirmar que é a mesma pessoa. Não repita: a clínica precisa resolver no Elim |
+| `422` | `ERR_INVALID_PHONE`: telefone que não pôde ser normalizado |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

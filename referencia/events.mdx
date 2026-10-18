@@ -1,0 +1,128 @@
+---
+title: "GET /events"
+sidebarTitle: "GET /events"
+description: "O feed de eventos da clínica, paginado por cursor. Só os tipos cobertos pelos escopos da chave."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/events?after={cursor}&types=appointment.status_changed,lead.created&limit=100
+```
+
+Leia [Feed de eventos](/eventos) antes: o ciclo de leitura, as garantias do cursor e o formato de cada tipo estão lá. Esta página é a referência do contrato.
+
+**Escopo:** pelo menos um entre `whatsapp` e `events:*`. A resposta traz só os tipos cobertos pelos escopos da chave, mais `contact.opted_out` e `patient.anonymized`, que vão para toda chave com escopo de evento. Veja [Escopos](/escopos).
+
+**Limite:** 60 requisições por minuto por chave.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField query="after" type="string">
+  O `next_cursor` da leitura anterior. Sem ele, a leitura começa do evento mais antigo guardado (até 7 dias). Opaco: não interprete nem monte. Cursor ilegível é `400 ERR_INVALID_REQUEST`; cursor que aponta para um evento com mais de 7 dias é `410 ERR_CURSOR_EXPIRED`.
+</ParamField>
+
+<ParamField query="types" type="string">
+  Tipos separados por vírgula, por exemplo `message.received,lead.created`. Sem o parâmetro, todos os tipos que a chave pode ver. Tipo desconhecido é `400 ERR_INVALID_REQUEST`; tipo cujo escopo a chave não tem é `403 ERR_SCOPE_MISSING`.
+</ParamField>
+
+<ParamField query="limit" default="100" type="integer">
+  De 1 a 500. Valores fora da faixa são ajustados para o limite.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Eventos na ordem do feed.
+
+  <Expandable title="evento">
+    <ResponseField name="event_id" type="string (uuid)">
+      Id único do evento. Use para não processar o mesmo evento duas vezes.
+    </ResponseField>
+
+    <ResponseField name="type" type="string">
+      Um dos [tipos de evento](/eventos#tipos-de-evento).
+    </ResponseField>
+
+    <ResponseField name="occurred_at" type="string (ISO 8601)">
+      Quando o fato aconteceu, em UTC.
+    </ResponseField>
+
+    <ResponseField name="phone" type="string | null">
+      Telefone do contato ou paciente, em dígitos com `55`. `null` nos eventos da conta WhatsApp e quando o paciente não tem telefone.
+    </ResponseField>
+
+    <ResponseField name="numero_destino" type="string | null">
+      Número da clínica envolvido, em dígitos, nos eventos de mensagem, de lead e de pedido de remarcar ou cancelar. `null` nos demais.
+    </ResponseField>
+
+    <ResponseField name="data" type="object">
+      Campos do tipo. Veja [cada tipo](/eventos#tipos-de-evento). Novos campos podem aparecer; ignore os que não conhece.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="next_cursor" type="string | null">
+  Passe em `?after=` na próxima leitura. Vem sempre que a página teve pelo menos um evento. Em página vazia, é a mesma posição recebida em `after`, com a validade renovada (grave-o: é o que impede o cursor de expirar num feed parado); sem `after` e sem evento, `null`.
+</ResponseField>
+
+<ResponseField name="has_more" type="boolean">
+  `true` quando já há mais eventos prontos depois desta página. Chame de novo em seguida.
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    {
+      "event_id": "3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b",
+      "type": "message.received",
+      "occurred_at": "2026-10-20T14:02:58.000Z",
+      "phone": "5511987654321",
+      "numero_destino": "551140000000",
+      "data": { "message_id": "wamid.HBgNNTUxMTk4NzY1NDMyMRUCABIYFjNFQjA…", "button_reply": "Confirmar" }
+    },
+    {
+      "event_id": "8c1e2f4a-6b7d-4e9f-a0b1-c2d3e4f5a6b7",
+      "type": "appointment.status_changed",
+      "occurred_at": "2026-10-20T14:03:11.204Z",
+      "phone": "5511987654321",
+      "numero_destino": null,
+      "data": {
+        "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2",
+        "status": "confirmado",
+        "previous_status": "agendado",
+        "unscheduled": false,
+        "scheduled_for": "2026-10-21T09:30:00-03:00",
+        "by": "system"
+      }
+    }
+  ],
+  "next_cursor": "MTIzNDU2Nzg5LjQ1Ni4xNzkyMjUyODAwMDAw",
+  "has_more": false
+}
+```
+
+```json 410
+{
+  "error": {
+    "code": "ERR_CURSOR_EXPIRED",
+    "message": "O cursor expirou: eventos com mais de 7 dias não ficam guardados. Refaça a carga e recomece sem cursor."
+  }
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: `after` ilegível ou tipo desconhecido em `types` |
+| `403` | `ERR_SCOPE_MISSING`: a chave não tem nenhum escopo de evento, ou pediu em `types` um tipo cujo escopo não tem |
+| `410` | `ERR_CURSOR_EXPIRED`: refaça a carga pelas rotas de estado e recomece sem `after`. Veja [Retenção e cursor expirado](/eventos#retencao-e-cursor-expirado) |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

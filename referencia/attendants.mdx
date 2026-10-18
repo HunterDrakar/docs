@@ -1,0 +1,92 @@
+---
+title: "GET /attendants"
+sidebarTitle: "GET /attendants"
+description: "A equipe ativa da clínica, com função, departamentos e o ID que a clínica usa no seu CRM. Para traduzir o attendant_id e o department_id dos eventos."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/attendants
+```
+
+Os eventos trazem atendentes e departamentos só por id (`attendant_id`, `department_id`). Esta rota traduz esses ids para nomes e, quando a clínica preencheu, para o id da mesma pessoa no seu sistema.
+
+**Escopo:** `attendants:read`.
+
+**Limite:** 60 requisições por minuto por chave.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Funcionários ativos com vínculo com a clínica, em ordem de nome. Funcionários desligados ou inativos não aparecem.
+
+  <Expandable title="funcionário">
+    <ResponseField name="id" type="string (uuid)">
+      Id do usuário no Elim. É o `attendant_id` dos eventos.
+    </ResponseField>
+
+    <ResponseField name="name" type="string | null">
+      Nome cadastrado no Elim.
+    </ResponseField>
+
+    <ResponseField name="role" type="string">
+      Função no Elim: `manager` (gestor), `doctor` (profissional de saúde) ou `receptionist` (recepção).
+    </ResponseField>
+
+    <ResponseField name="external_ref" type="string | null">
+      O **ID no CRM**: um identificador livre (até 100 caracteres) que a clínica preenche no cadastro do funcionário no Elim, para casar a pessoa com o usuário dela no seu sistema. `null` quando não preenchido.
+    </ResponseField>
+
+    <ResponseField name="departments" type="array">
+      Departamentos de WhatsApp ativos de que a pessoa faz parte, cada um com `id` (o `department_id` dos eventos) e `name`. `[]` quando não participa de nenhum.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    {
+      "id": "4b0c1e2d-3f4a-4b5c-8d6e-7f8a9b0c1d2e",
+      "name": "Juliana Prado",
+      "role": "receptionist",
+      "external_ref": "crm-1042",
+      "departments": [
+        { "id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a", "name": "Agendamento" }
+      ]
+    },
+    {
+      "id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "name": "Rafael Souza",
+      "role": "manager",
+      "external_ref": null,
+      "departments": []
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+<Note>
+  **O e-mail de login não sai.** Ele é credencial de acesso e muitas vezes um endereço pessoal. Para casar o funcionário com o seu sistema, peça à clínica que preencha o **ID no CRM** no cadastro de cada pessoa.
+</Note>
+
+<Tip>
+  A equipe muda pouco. Guarde a lista no seu sistema e atualize quando aparecer um `attendant_id` ou `department_id` que você não conhece, ou uma vez por dia.
+</Tip>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `403` | `ERR_SCOPE_MISSING`: falta `attendants:read` |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

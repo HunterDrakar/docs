@@ -1,0 +1,74 @@
+---
+title: "GET /availability"
+sidebarTitle: "GET /availability"
+description: "Os horários livres de um profissional num dia, pela mesma conta da página de auto-agendamento da clínica."
+---
+
+```http
+GET https://www.elimagenda.com.br/api/v1/availability?doctor_id={doctor_id}&date=2026-10-21
+```
+
+Devolve os horários em que o profissional pode ser agendado online naquele dia. A conta é a mesma da página pública de auto-agendamento da clínica: grade do profissional, horário de funcionamento e intervalo da clínica, consultas já marcadas, antecedência mínima e janela máxima de agendamento.
+
+**Escopo:** `availability:read`.
+
+**Limite:** 120 requisições por minuto por chave.
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField query="doctor_id" type="string (uuid)" required>
+  Id de um profissional de [`GET /doctors`](/referencia/doctors) com `accepts_online_scheduling: true`. Ausente ou fora do formato UUID é `400 ERR_INVALID_REQUEST`.
+</ParamField>
+
+<ParamField query="date" type="string (YYYY-MM-DD)" required>
+  O dia, no calendário de Brasília. Data inexistente (como `2026-02-30`) ou em outro formato é `400 ERR_INVALID_REQUEST`.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="array">
+  Horários livres do dia, em ordem. Lista vazia quando o profissional não atende nesse dia, quando tudo está ocupado, ou quando a data está fora da janela de agendamento da clínica (no passado ou além do limite de dias à frente). Horários mais próximos do que a antecedência mínima da clínica também não aparecem.
+
+  <Expandable title="horário">
+    <ResponseField name="start" type="string">
+      Início, em ISO 8601 com o fuso de Brasília: `2026-10-21T09:30:00-03:00`.
+    </ResponseField>
+
+    <ResponseField name="end" type="string">
+      Fim: o início mais a duração padrão de consulta da clínica.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": [
+    { "start": "2026-10-21T09:00:00-03:00", "end": "2026-10-21T09:30:00-03:00" },
+    { "start": "2026-10-21T09:30:00-03:00", "end": "2026-10-21T10:00:00-03:00" },
+    { "start": "2026-10-21T14:00:00-03:00", "end": "2026-10-21T14:30:00-03:00" }
+  ]
+}
+```
+
+</ResponseExample>
+
+<Note>
+  Horário livre agora não é reserva. Esta rota não marca consulta: para o paciente agendar, gere um [link de agendamento](/referencia/scheduling-links). Se a disponibilidade não puder ser lida por inteiro, a resposta é `500`, nunca uma lista que anunciaria como livre um horário ocupado.
+</Note>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: `doctor_id` ou `date` ausente ou inválido |
+| `403` | `ERR_SCOPE_MISSING`: falta `availability:read` |
+| `404` | `ERR_DOCTOR_NOT_FOUND`: o profissional não existe, é de outra clínica, está inativo ou não aceita agendamento online. A resposta é a mesma nos quatro casos, de propósito |
+| `500` | `ERR_INTERNAL`: a disponibilidade não pôde ser lida. Tente de novo |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).

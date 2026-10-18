@@ -71,6 +71,7 @@ Um mesmo disparo pode misturar os dois modos.
 
     - Serve para templates que não dependem de agendamento (avisos, campanhas, lembretes genéricos).
     - Não há botão de ação: nada muda no Elim quando o paciente responde.
+    - Telefone que pediu à clínica para não receber mensagens não recebe o envio livre: o disparo é aceito, e esse destinatário termina `failed` com [`ERR_RECIPIENT_OPTED_OUT`](/erros#erros-por-destinatario). No modo vinculado o envio segue, porque é mensagem da consulta que o paciente marcou.
     - Se o template tiver variável `server` ou botão de ação, a resposta é `422 ERR_TEMPLATE_REQUIRES_APPOINTMENT`.
   </Tab>
 </Tabs>
@@ -135,7 +136,7 @@ Só então o run é gravado e o envio começa.
 
 ## 5. O que acontece depois
 
-O envio roda em segundo plano, em lotes, respeitando o ritmo que a Meta aceita. Um disparo de 1.000 destinatários leva alguns minutos. Se o processamento for interrompido (por exemplo, por um limite de tempo do servidor), um processo de recuperação retoma de onde parou em até 5 minutos, sem reenviar o que já saiu.
+O envio roda em segundo plano, em lotes, respeitando o ritmo que a Meta aceita. Um disparo de 1.000 destinatários leva alguns minutos. Se o processamento for interrompido (por exemplo, numa atualização do servidor), um processo de recuperação, que passa a cada minuto, retoma o disparo parado há mais de 10 minutos de onde parou, sem reenviar o que já saiu. Destinatário que pode ter recebido sem confirmação volta como `ERR_DELIVERY_UNCERTAIN`: não reenvie sem conferir.
 
 Um destinatário nunca é enviado duas vezes pelo mesmo run: cada um passa por uma reserva atômica antes do envio.
 

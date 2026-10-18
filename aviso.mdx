@@ -1,0 +1,127 @@
+---
+title: "Aviso de evento novo"
+sidebarTitle: "Aviso de evento novo"
+description: "Um POST assinado no seu endpoint sempre que o feed da clínica tem evento novo. Opcional, sem dado nenhum: o evento você lê no feed."
+---
+
+O aviso é opcional. Ele existe para você não precisar consultar o [feed](/eventos) a cada poucos segundos: quando a clínica tem evento novo, o Elim faz um `POST` no endereço que você informar, dizendo só **"tem evento novo"**. Aí você lê [`GET /events`](/referencia/events) pelo seu cursor, como já faria.
+
+<Note>
+  **O aviso não traz evento, cursor nem dado de paciente.** O conteúdo continua saindo só pelo feed, autenticado pela chave e filtrado pelos escopos. Um aviso perdido não perde nada: o feed guarda os eventos e você os lê na próxima consulta.
+</Note>
+
+## Cadastro
+
+1. A clínica cadastra o endereço em **Configurações → API**. É **um endereço por clínica**, e ele sobrevive à troca da chave.
+2. O endereço precisa ser `https://` e acessível pela internet. Endereços internos (rede privada, `localhost`) são recusados, e a checagem se repete a cada envio.
+3. Ao salvar, o Elim mostra o **segredo de assinatura** uma única vez. Ele começa com `elim_whsec_`. Guarde num cofre de segredos: o Elim não mostra de novo. Trocar o domínio do endereço gera um segredo novo.
+4. O botão **Testar** da aba API envia um aviso de teste (`ping.test`) na hora, para você conferir a recepção e a assinatura.
+
+## O que chega
+
+```http
+POST https://seu-sistema.example.com/elim/aviso
+Content-Type: application/json
+User-Agent: Elim-PublicApi-Ping/1
+X-Elim-Timestamp: 1792252800
+X-Elim-Signature: v1=5f2c8a0e…(64 caracteres hexadecimais)
+```
+
+```json
+{
+  "type": "events.available",
+  "clinic_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "sent_at": "2026-10-17T12:00:00.000Z"
+}
+```
+
+| Campo | O que é |
+| --- | --- |
+| `type` | `events.available` (o feed tem evento novo) ou `ping.test` (o botão **Testar** da aba API) |
+| `clinic_id` | A clínica que tem evento novo. Útil se o mesmo endereço recebe avisos de mais de uma clínica. |
+| `sent_at` | Quando o aviso saiu |
+
+| Header | O que é |
+| --- | --- |
+| `X-Elim-Timestamp` | Momento da assinatura, em segundos desde a época Unix |
+| `X-Elim-Signature` | `v1=` seguido do HMAC-SHA256 em hexadecimal |
+
+Responda com qualquer **`2xx`** em até **5 segundos**, e faça a leitura do feed depois de responder. Redirecionamento (`3xx`) conta como falha: o Elim não segue o `Location`. O corpo da sua resposta é ignorado.
+
+## Como conferir a assinatura
+
+Qualquer um pode fazer um `POST` no seu endereço. Antes de agir, confira que o aviso veio do Elim:
+
+1. Leia o corpo **cru**, exatamente como chegou, antes de qualquer parse. Re-serializar o JSON muda bytes e quebra a assinatura.
+2. Recuse o aviso se `X-Elim-Timestamp` estiver a mais de **5 minutos** do seu relógio. Isso impede que alguém reenvie um aviso antigo capturado.
+3. Calcule `HMAC-SHA256(segredo, "<X-Elim-Timestamp>.<corpo cru>")` em hexadecimal, com o segredo `elim_whsec_…`.
+4. Compare com o valor depois de `v1=` usando uma comparação em **tempo constante**. Igual: o aviso é legítimo.
+
+<CodeGroup>
+
+```javascript Node.js
+import crypto from 'node:crypto'
+import express from 'express'
+
+const app = express()
+const SECRET = process.env.ELIM_WEBHOOK_SECRET // elim_whsec_...
+
+app.post('/elim/aviso', express.raw({ type: 'application/json' }), (req, res) => {
+  const ts = req.get('X-Elim-Timestamp') ?? ''
+  const sig = (req.get('X-Elim-Signature') ?? '').replace(/^v1=/, '')
+  const rawBody = req.body.toString('utf8')
+
+  if (!/^\d+$/.test(ts) || Math.abs(Date.now() / 1000 - Number(ts)) > 300) {
+    return res.status(400).end()
+  }
+  const expected = crypto.createHmac('sha256', SECRET).update(`${ts}.${rawBody}`).digest('hex')
+  const valid =
+    sig.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+  if (!valid) return res.status(401).end()
+
+  res.status(204).end()
+  drainFeed() // lê GET /events pelo seu cursor, fora da resposta
+})
+```
+
+```python Python
+import hashlib, hmac, os, time
+from flask import Flask, request
+
+app = Flask(__name__)
+SECRET = os.environ["ELIM_WEBHOOK_SECRET"].encode()  # elim_whsec_...
+
+@app.post("/elim/aviso")
+def aviso():
+    ts = request.headers.get("X-Elim-Timestamp", "")
+    sig = request.headers.get("X-Elim-Signature", "").removeprefix("v1=")
+    raw_body = request.get_data()  # bytes, exatamente como chegaram
+
+    if not ts.isdigit() or abs(time.time() - int(ts)) > 300:
+        return "", 400
+    expected = hmac.new(SECRET, ts.encode() + b"." + raw_body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return "", 401
+
+    enqueue_feed_drain()  # lê GET /events pelo seu cursor, fora da resposta
+    return "", 204
+```
+
+</CodeGroup>
+
+## Quando o aviso sai
+
+- O Elim confere o feed de cada clínica a cada **15 segundos**. Se há evento novo desde o último aviso entregue, envia um aviso. Vários eventos no mesmo intervalo geram **um** aviso só.
+- Sem evento novo, nada sai.
+- O aviso é sobre o feed da **clínica**: ele não sabe quais tipos você filtra em `types`. Pode chegar um aviso e a sua leitura filtrada não trazer nada.
+
+## Quando a entrega falha
+
+Resposta fora de `2xx`, tempo esgotado, erro de rede ou endereço recusado contam como falha. O Elim então **recua**: espera 15 segundos × 2 elevado ao número de falhas seguidas, com teto de **1 hora**, e só tenta de novo se ainda houver evento que não foi avisado. Na primeira entrega que der certo, o ritmo volta ao normal.
+
+Falha de entrega **não perde evento**: os eventos continuam no feed por 7 dias, independentemente do aviso. A aba API mostra à clínica o último erro (por exemplo `http_500` ou `timeout`). O corpo da sua resposta nunca é guardado.
+
+<Tip>
+  Mesmo com o aviso funcionando, faça uma leitura de segurança do feed a cada poucos minutos. Assim, um período em que o seu endpoint ficou fora do ar não atrasa nada além do intervalo dessa leitura.
+</Tip>

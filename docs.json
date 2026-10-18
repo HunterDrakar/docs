@@ -15,6 +15,7 @@
         "pages": [
           "index",
           "autenticacao",
+          "escopos",
           "erros",
           "agentes-de-ia"
         ]
@@ -27,13 +28,39 @@
         ]
       },
       {
-        "group": "Referência",
+        "group": "Eventos",
+        "pages": [
+          "eventos",
+          "aviso"
+        ]
+      },
+      {
+        "group": "Referência: disparos",
         "pages": [
           "referencia/templates",
           "referencia/numeros",
           "referencia/messages",
           "referencia/runs",
           "referencia/run-recipients"
+        ]
+      },
+      {
+        "group": "Referência: eventos e agenda",
+        "pages": [
+          "referencia/events",
+          "referencia/appointments",
+          "referencia/appointments-search",
+          "referencia/conversations-search",
+          "referencia/attendants",
+          "referencia/doctors",
+          "referencia/availability"
+        ]
+      },
+      {
+        "group": "Referência: ações",
+        "pages": [
+          "referencia/patients",
+          "referencia/scheduling-links"
         ]
       }
     ]
@@ -72,5 +99,5 @@
       "website": "https://www.elimagenda.com.br"
     }
   },
-  "description": "Dispare templates de WhatsApp aprovados pela Meta a partir do sistema da sua clínica e acompanhe entrega, leitura e as respostas dos botões."
+  "description": "Dispare templates de WhatsApp aprovados pela Meta, acompanhe entrega e respostas, e receba os eventos da clínica (mensagens, conversas, consultas e leads) no seu sistema."
 }

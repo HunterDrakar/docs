@@ -1,0 +1,134 @@
+---
+title: "POST /whatsapp/conversations/search"
+sidebarTitle: "POST /whatsapp/conversations/search"
+description: "O estado da conversa de WhatsApp de um telefone: quem atende, se está encerrada, se a janela de 24 horas está aberta e de qual anúncio veio."
+---
+
+```http
+POST https://www.elimagenda.com.br/api/v1/whatsapp/conversations/search
+```
+
+O telefone vai no corpo, nunca na URL, pelo mesmo motivo explicado na [busca de consultas](/referencia/appointments-search): endereços de requisição ficam gravados em logs que ninguém controla.
+
+**Escopo:** `conversations:read`. O campo `tag_ids` só aparece se a chave tiver **também** `events:tags`.
+
+**Limite:** 60 requisições por minuto por chave.
+
+Cada busca fica registrada no Elim, com ou sem resultado (o telefone pesquisado não é gravado no registro).
+
+## Parâmetros
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer elim_live_...`
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  `application/json`
+</ParamField>
+
+## Corpo
+
+<ParamField body="phone" type="string" required>
+  Telefone em qualquer formato brasileiro, de 10 a 13 dígitos. A busca encontra a conversa com ou sem o nono dígito; havendo mais de uma, devolve a de mensagem mais recente.
+</ParamField>
+
+## Resposta `200`
+
+<ResponseField name="data" type="object">
+  <Expandable title="data">
+    <ResponseField name="attendant_id" type="string (uuid) | null">
+      Atendente responsável agora, ou `null`. Nome em [`GET /attendants`](/referencia/attendants).
+    </ResponseField>
+
+    <ResponseField name="department_id" type="string (uuid) | null">
+      Departamento responsável agora, ou `null`.
+    </ResponseField>
+
+    <ResponseField name="finished" type="boolean">
+      `true` quando a conversa está encerrada. Uma nova mensagem do contato reabre.
+    </ResponseField>
+
+    <ResponseField name="last_inbound_at" type="string (ISO 8601) | null">
+      Última mensagem recebida do contato, em UTC.
+    </ResponseField>
+
+    <ResponseField name="window_open" type="boolean">
+      `true` quando a última mensagem do contato chegou há menos de 24 horas: a janela da Meta em que a clínica pode responder com texto livre. Fora dela, só template.
+    </ResponseField>
+
+    <ResponseField name="tag_ids" type="string[]">
+      Ids das etiquetas da conversa. **Só aparece** se a chave tiver `events:tags`; sem esse escopo o campo não vem (não vem `[]`, que leria como "sem etiqueta").
+    </ResponseField>
+
+    <ResponseField name="ad" type="object | null">
+      O anúncio da Meta de onde a conversa veio: o da primeira mensagem que chegou por um anúncio. `null` se nenhuma chegou.
+
+      <Expandable title="ad">
+        <ResponseField name="source_id" type="string | null">
+          Id do anúncio na Meta.
+        </ResponseField>
+
+        <ResponseField name="title" type="string | null">
+          Título do anúncio.
+        </ResponseField>
+
+        <ResponseField name="ctwaclid" type="string | null">
+          Id do clique no anúncio.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+
+```bash
+curl -s -X POST https://www.elimagenda.com.br/api/v1/whatsapp/conversations/search \
+  -H "Authorization: Bearer $ELIM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "phone": "5511987654321" }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "data": {
+    "attendant_id": "4b0c1e2d-3f4a-4b5c-8d6e-7f8a9b0c1d2e",
+    "department_id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",
+    "finished": false,
+    "last_inbound_at": "2026-10-20T14:02:58.000Z",
+    "window_open": true,
+    "tag_ids": ["1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"],
+    "ad": {
+      "source_id": "120211234567890123",
+      "title": "Consulta de avaliação",
+      "ctwaclid": "ARAkLkA8rmlFeiCktEJQ…"
+    }
+  }
+}
+```
+
+```json 404
+{
+  "error": {
+    "code": "ERR_CONVERSATION_NOT_FOUND",
+    "message": "Nenhuma conversa de WhatsApp com este telefone."
+  }
+}
+```
+
+</ResponseExample>
+
+## Erros
+
+| HTTP | Código |
+| --- | --- |
+| `400` | `ERR_INVALID_REQUEST`: corpo que não é JSON |
+| `403` | `ERR_SCOPE_MISSING`: falta `conversations:read` |
+| `404` | `ERR_CONVERSATION_NOT_FOUND`: nenhuma conversa de WhatsApp com esse telefone na clínica |
+| `422` | `ERR_INVALID_PHONE`: `phone` ausente ou fora de 10 a 13 dígitos |
+
+Mais os [erros de acesso](/autenticacao#erros-de-acesso).
