@@ -31,19 +31,30 @@ Todo erro tem o mesmo formato:
 | --- | --- | --- | --- |
 | `401` | `ERR_INVALID_KEY` | Chave ausente, malformada, inexistente ou revogada | Não. Confira a chave. |
 | `403` | `ERR_FEATURE_DISABLED` | API não habilitada para a clínica, clínica inativa ou clínica de demonstração | Não. Fale com o Elim. |
+| `403` | `ERR_SCOPE_MISSING` | A chave não tem o escopo que a rota exige (quando a rota exige mais de um, todos), ou o feed recebeu em `types` um tipo cujo escopo a chave não tem | Não. A clínica marca o escopo em Configurações → API. Veja [Escopos](/escopos). |
 | `429` | `ERR_RATE_LIMITED` | Limite de requisições por chave ou por IP | Sim, após `Retry-After`. |
 
 ### Pedido
 
 | HTTP | Código | Significado | Tentar de novo? |
 | --- | --- | --- | --- |
-| `400` | `ERR_INVALID_REQUEST` | JSON malformado, campo fora do schema, header `Idempotency-Key` ausente, `cursor` ilegível ou `status` desconhecido | Não. Corrija o pedido. |
+| `400` | `ERR_INVALID_REQUEST` | JSON malformado, campo fora do schema, header `Idempotency-Key` ausente, `cursor` ou `after` ilegível, `status` ou tipo de evento desconhecido, parâmetro obrigatório ausente (`updated_since`, `doctor_id`, `date`) | Não. Corrija o pedido. |
 | `400` | `ERR_INVALID_CHANNEL` | `?channel=` não é `service` nem `dispatch` | Não. |
 | `404` | `ERR_TEMPLATE_NOT_FOUND` | Template não existe no número escolhido | Não. Confira `GET /templates` no mesmo `channel`. |
 | `404` | `ERR_RUN_NOT_FOUND` | Disparo inexistente, de outra clínica ou já expirado (60 dias) | Não. |
 | `409` | `ERR_TEMPLATE_NOT_APPROVED` | O template existe mas a Meta ainda não aprovou | Depois que a Meta aprovar. |
 | `409` | `ERR_IDEMPOTENCY_CONFLICT` | A mesma `Idempotency-Key` já foi usada com outro conteúdo | Não. Use uma chave nova para um pedido novo. |
 | `409` | `ERR_RUN_IN_PROGRESS` | Já existe um disparo em processamento para a clínica | Sim, quando o disparo atual terminar. Consulte `GET /runs`. |
+
+### Feed de eventos, agenda e cadastro
+
+| HTTP | Código | Significado | Tentar de novo? |
+| --- | --- | --- | --- |
+| `410` | `ERR_CURSOR_EXPIRED` | `GET /events`: o cursor aponta para um evento com mais de 7 dias, e os eventos do meio podem ter sido apagados | Não com o mesmo cursor. Refaça a carga pelas rotas de estado e recomece sem `after`. Veja [Retenção e cursor expirado](/eventos#retencao-e-cursor-expirado). |
+| `404` | `ERR_DOCTOR_NOT_FOUND` | `GET /availability`: profissional inexistente, de outra clínica, inativo ou sem agendamento online. Mesma resposta nos quatro casos, de propósito | Não. Escolha um profissional de `GET /doctors` com `accepts_online_scheduling: true`. |
+| `409` | `ERR_PATIENT_AMBIGUOUS` | `POST /patients`: já existe cadastro com o telefone e não dá para confirmar que é a mesma pessoa (vários cadastros, ou um com nome diferente). Não revela nomes nem quantidade | Não. A clínica confere o cadastro no Elim. |
+| `404` | `ERR_CONVERSATION_NOT_FOUND` | `POST /whatsapp/conversations/search`: nenhuma conversa de WhatsApp com o telefone na clínica | Não, até o contato conversar com a clínica. |
+| `422` | `ERR_SCHEDULING_DISABLED` | `POST /scheduling-links`: a clínica não tem o auto-agendamento ligado, ou não tem endereço público | Não. A clínica precisa ligar o auto-agendamento no Elim. |
 
 ### Validação dos destinatários
 
@@ -52,7 +63,7 @@ Tudo ou nada: se **um** destinatário for inválido, nada é enviado e a respost
 | HTTP | Código | Significado |
 | --- | --- | --- |
 | `422` | `ERR_TOO_MANY_RECIPIENTS` | Mais de 1.000 destinatários |
-| `422` | `ERR_INVALID_PHONE` | Telefone ausente no modo livre, ou impossível de normalizar; no modo vinculado, o paciente do agendamento não tem telefone |
+| `422` | `ERR_INVALID_PHONE` | Telefone ausente no modo livre, ou impossível de normalizar; no modo vinculado, o paciente do agendamento não tem telefone. Também nas rotas que recebem `phone` no corpo (`/appointments/search`, `/whatsapp/conversations/search`, `/patients`, `/scheduling-links`) |
 | `422` | `ERR_DUPLICATE_RECIPIENT` | O mesmo telefone ou o mesmo `appointment_id` aparece duas vezes no disparo |
 | `422` | `ERR_MISSING_VARIABLES` | Uma variável `filled_by: client` não foi enviada |
 | `422` | `ERR_UNKNOWN_VARIABLE` | Variável que o template não tem |
@@ -75,18 +86,21 @@ Tudo ou nada: se **um** destinatário for inválido, nada é enviado e a respost
 
 ## Erros por destinatário
 
-Estes não são respostas HTTP. Aparecem em `GET /runs/{run_id}/recipients`, no campo `error` de um destinatário com `status: failed`.
+Estes não são respostas HTTP: o disparo é aceito com `202` e o destinatário falha depois. Aparecem em `GET /runs/{run_id}/recipients`, no campo `error` de um destinatário com `status: failed`.
 
 | Código | Significado |
 | --- | --- |
 | `ERR_META_REJECTED` | A Meta recusou o envio para este número. `meta_code` traz o código da Meta (por exemplo `131026`, número sem WhatsApp, ou `131049`, a Meta limitou o volume de marketing para esse usuário). |
 | `ERR_CONTEXT_UNAVAILABLE` | O agendamento não tinha dado suficiente para montar a mensagem (paciente sem telefone, médico ou data ausentes). |
 | `ERR_INTERRUPTED` | O disparo foi interrompido com este destinatário ainda na fila: o envio dele **não começou**. Pode enviar de novo em um disparo novo. |
+| `ERR_RECIPIENT_OPTED_OUT` | Só no modo **livre**: o telefone pediu à clínica para não receber mais mensagens (veja o evento `contact.opted_out` em [Eventos que exigem ação](/eventos#eventos-que-exigem-acao)). Nada foi enviado. Reenviar dá o mesmo resultado até a clínica retirar o pedido. Destinatários **vinculados** a um agendamento não são cortados: a mensagem da consulta que o paciente marcou continua. |
 | `ERR_DELIVERY_UNCERTAIN` | A conexão com a Meta caiu **durante** o envio (sem resposta, tempo esgotado ou falha no meio) e não sabemos se a mensagem chegou. O paciente pode ter recebido. **Não reenvie automaticamente**: só reenvie se o paciente disser que não recebeu, para não mandar a mensagem em dobro. |
 
 ## Como tratar
 
 - **`4xx` de validação** (`400`, `422`): erro do pedido. Não repita sem corrigir.
-- **`409`**: estado da clínica ou do disparo. Leia o código; cada um tem um remédio diferente.
+- **`403`**: a API não está liberada (`ERR_FEATURE_DISABLED`) ou falta escopo (`ERR_SCOPE_MISSING`). Repetir não resolve; alguém da clínica precisa agir.
+- **`409`**: estado da clínica, do disparo ou do cadastro. Leia o código; cada um tem um remédio diferente.
+- **`410`**: só no feed. Refaça a carga e recomece sem cursor.
 - **`429`**: espere. Nos limites de requisição, o `Retry-After` diz quanto; no bloqueio da Meta, consulte `GET /numbers` antes de tentar de novo.
 - **`5xx`**: repita com espera exponencial e a **mesma** `Idempotency-Key`. Se o disparo tiver sido criado antes da falha, a repetição devolve o `run_id` original em vez de criar outro.

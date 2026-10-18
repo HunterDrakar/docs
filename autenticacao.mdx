@@ -18,12 +18,23 @@ A chave identifica a **clínica**. Tudo o que a API devolve é da clínica dona 
 3. Guarde a chave num cofre de segredos ou variável de ambiente. Nunca em código-fonte, repositório, planilha ou mensagem.
 
 <Warning>
-  Só existe **uma chave ativa por clínica**. Gerar uma nova revoga a anterior no mesmo instante: o sistema que usava a antiga passa a receber `401` imediatamente. Troque a chave no seu sistema antes de gerar a nova, ou faça a troca num horário sem disparos.
+  Só existe **uma chave ativa por clínica**. Gerar uma nova revoga a anterior no mesmo instante (a nova herda os escopos da anterior): o sistema que usava a antiga passa a receber `401` imediatamente. Troque a chave no seu sistema antes de gerar a nova, ou faça a troca num horário sem disparos.
 </Warning>
 
 ## Formato
 
-A chave começa com `elim_live_` seguido de 64 caracteres hexadecimais. O prefixo permite identificar a chave nos logs e na tela do Elim sem expor o segredo.
+A chave começa com um prefixo seguido de 64 caracteres hexadecimais (minúsculos). O prefixo permite identificar a chave nos logs e na tela do Elim sem expor o segredo.
+
+| Prefixo | Onde vale |
+| --- | --- |
+| `elim_live_` | **Produção** (`www.elimagenda.com.br`). É a única aceita lá. |
+| `elim_test_` | **Só no ambiente de testes do Elim**, com dados de teste. O endereço do ambiente de testes é informado pelo Elim junto com a chave. |
+
+Uma chave `elim_test_` enviada à produção responde `401 ERR_INVALID_KEY`, como qualquer chave inválida, e vice-versa. Desenvolva e teste a integração com a chave de teste, e troque pela `elim_live_` da clínica só para ir ao ar.
+
+## Escopos
+
+Além de identificar a clínica, a chave tem **escopos**: o que ela pode ver e fazer. A clínica marca os escopos na aba API, e regenerar a chave mantém os escopos da anterior. Rota sem o escopo necessário responde `403 ERR_SCOPE_MISSING`. Veja [Escopos e compartilhamento](/escopos).
 
 ## Erros de acesso
 
@@ -31,15 +42,23 @@ A chave começa com `elim_live_` seguido de 64 caracteres hexadecimais. O prefix
 | --- | --- | --- |
 | `401` | `ERR_INVALID_KEY` | Header ausente, malformado, chave inexistente ou revogada. A resposta é a mesma em todos esses casos, de propósito. |
 | `403` | `ERR_FEATURE_DISABLED` | A chave é válida, mas a API Pública não está habilitada para a clínica ou a clínica está inativa. Fale com o Elim. |
+| `403` | `ERR_SCOPE_MISSING` | A chave é válida e a API está liberada, mas falta à chave o escopo que a rota exige. A clínica marca o escopo em Configurações → API. |
 | `429` | `ERR_RATE_LIMITED` | Limite de requisições. Veja abaixo. |
 
 ## Limites de requisição
 
-| Escopo | Limite |
+Cada rota tem o seu próprio balde por chave: esgotar o limite de uma não afeta as outras.
+
+| Rota | Limite por chave |
 | --- | --- |
-| Por chave, rotas de leitura (`GET`) | 120 por minuto |
-| Por chave, `POST /messages` | 10 por minuto |
-| Por endereço IP, toda a API | 300 por minuto |
+| `GET /whatsapp/templates`, `GET /whatsapp/numbers`, `GET /whatsapp/runs/{run_id}`, `GET /whatsapp/runs/{run_id}/recipients` | 120 por minuto |
+| `POST /whatsapp/messages` | 10 por minuto |
+| `GET /events` | 60 por minuto |
+| `GET /appointments`, `POST /appointments/search` | 60 por minuto |
+| `GET /attendants`, `GET /doctors` | 60 por minuto |
+| `GET /availability` | 120 por minuto |
+| `POST /patients`, `POST /scheduling-links`, `POST /whatsapp/conversations/search` | 60 por minuto |
+| **Por endereço IP, toda a API** | 300 por minuto |
 
 Quando o limite é atingido, a resposta `429` traz:
 

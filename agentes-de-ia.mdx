@@ -58,7 +58,9 @@ https://elim-agenda.mintlify.app/mcp
 
 ## O contrato em quinze linhas
 
-Se o agente for escrever a integração, dê a ele este bloco. É tudo o que precisa estar certo para o código funcionar de primeira; o resto da doc é detalhe.
+O bloco abaixo cobre os **disparos**. Para o feed de eventos, aponte o agente para [Feed de eventos](/eventos) e [Escopos](/escopos): o essencial é continuar sempre do `next_cursor`, deduplicar por `event_id` e tratar `410 ERR_CURSOR_EXPIRED` refazendo a carga.
+
+Se o agente for escrever a integração de disparos, dê a ele este bloco. É tudo o que precisa estar certo para o código funcionar de primeira; o resto da doc é detalhe.
 
 ```text
 Base: https://www.elimagenda.com.br/api/v1/whatsapp — header Authorization: Bearer elim_live_... em toda chamada.
@@ -73,8 +75,8 @@ Base: https://www.elimagenda.com.br/api/v1/whatsapp — header Authorization: Be
 9.  GET /runs/{run_id} a cada 15–30 s até status ∈ {completed, interrupted}. counts = {accepted, sent, delivered, read, failed}.
 10. sent = a Meta aceitou; delivered e read chegam DEPOIS, por horas. failed pode aparecer depois de sent.
 11. GET /runs/{run_id}/recipients?status=&limit=100&cursor= — cursor opaco, next_cursor null no fim, nunca offset.
-12. Cada destinatário: { phone, mode, status, error{code, meta_code}|null, sent_at, appointment{id, status, updated_at}|null, reply{button, clicked_at}|null }.
-13. reply.button ∈ {confirmar, reagendar, cancelar}; appointment.status é o status REAL no Elim e é o que vale.
+12. Cada destinatário: { phone, mode, status, error{code, meta_code}|null, sent_at, appointment{id, status, updated_at}|null, reply{button, label, clicked_at}|null }.
+13. reply.button ∈ {confirmar, reagendar, cancelar} ou null (botão livre: use reply.label); appointment.status é o status REAL no Elim.
 14. Erros: envelope { error: { code, message, details? } }; programe contra code, nunca contra message. 429 → respeite Retry-After.
 15. Limites: 120 req/min por chave (GET), 10/min no POST, 300/min por IP; run consultável por 60 dias; toda resposta é no-store.
 ```

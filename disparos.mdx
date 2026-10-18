@@ -71,6 +71,7 @@ Um mesmo disparo pode misturar os dois modos.
 
     - Serve para templates que não dependem de agendamento (avisos, campanhas, lembretes genéricos).
     - Não há botão de ação: nada muda no Elim quando o paciente responde.
+    - Telefone que pediu à clínica para não receber mensagens não recebe o envio livre: o disparo é aceito, e esse destinatário termina `failed` com [`ERR_RECIPIENT_OPTED_OUT`](/erros#erros-por-destinatario). No modo vinculado o envio segue, porque é mensagem da consulta que o paciente marcou.
     - Se o template tiver variável `server` ou botão de ação, a resposta é `422 ERR_TEMPLATE_REQUIRES_APPOINTMENT`.
   </Tab>
 </Tabs>

@@ -1,0 +1,313 @@
+---
+title: "Feed de eventos"
+sidebarTitle: "Feed de eventos"
+description: "Como consumir o feed com cursor sem perder nem repetir evento, o que fazer com o 410, e o formato de cada tipo de evento."
+---
+
+O feed é uma fila **só de leitura** do que aconteceu na clínica: mensagem recebida, conversa atribuída, consulta confirmada, paciente anonimizado. Você consulta [`GET /events`](/referencia/events) com um cursor e recebe os eventos novos desde a última leitura.
+
+O Elim não empurra os eventos para o seu sistema. Se quiser saber **quando** consultar sem ficar perguntando, cadastre o [aviso de evento novo](/aviso), que só diz "tem coisa nova".
+
+```http
+GET https://www.elimagenda.com.br/api/v1/events?after={cursor}&types={tipos}&limit=100
+```
+
+## Como consumir
+
+<Steps>
+  <Step title="Primeira leitura, sem cursor">
+    Chame `GET /events` sem `after`. A resposta começa pelo evento mais antigo que o Elim ainda guarda (até 7 dias atrás).
+  </Step>
+  <Step title="Processe e guarde o cursor">
+    Processe os eventos de `data`, na ordem em que vieram, e **depois** grave o `next_cursor` no seu banco. Gravar antes de processar perde evento se o seu processo cair no meio.
+  </Step>
+  <Step title="Continue do cursor">
+    Chame de novo com `?after=<next_cursor>`. Enquanto `has_more` for `true`, chame imediatamente; quando for `false`, espere o intervalo de polling (ou o [aviso](/aviso)).
+  </Step>
+</Steps>
+
+```javascript
+async function drainFeed() {
+  let cursor = await db.getCursor() // null na primeira vez
+  for (;;) {
+    const qs = new URLSearchParams({ limit: '500' })
+    if (cursor) qs.set('after', cursor)
+    const res = await fetch(`https://www.elimagenda.com.br/api/v1/events?${qs}`, {
+      headers: { Authorization: `Bearer ${process.env.ELIM_API_KEY}` },
+    })
+    if (res.status === 410) return rebuildFromStateAndRestart() // veja "Cursor expirado"
+    const page = await res.json()
+    for (const event of page.data) await handleOnce(event) // deduplica por event_id
+    if (page.next_cursor) {
+      cursor = page.next_cursor
+      await db.saveCursor(cursor)
+    }
+    if (!page.has_more) return
+  }
+}
+```
+
+### Regras do cursor
+
+- **`next_cursor` vem sempre que a página teve pelo menos um evento**, mesmo que ela não esteja cheia. É dele que a próxima leitura continua.
+- **Página vazia devolve o mesmo cursor** que você mandou em `after`. Pode gravá-lo de novo sem medo. Sem `after` e sem evento, `next_cursor` é `null`.
+- **`has_more: true`** quer dizer que já existem mais eventos prontos além desta página.
+- O cursor é **opaco**: não interprete, não monte, não compare dois cursores. Ele pode mudar de formato. Cursor que não foi devolvido pelo Elim é `400 ERR_INVALID_REQUEST`.
+- `types` filtra por tipo, separado por vírgula (`?types=appointment.status_changed,lead.created`). O cursor continua valendo com ou sem filtro. Tipo desconhecido é `400`; tipo cujo escopo a chave não tem é `403 ERR_SCOPE_MISSING`.
+
+## Garantias
+
+**Nenhum evento aparece atrás do cursor.** O feed só mostra eventos que já foram gravados de forma definitiva, e sempre em ordem. Um fato que ainda está sendo salvo no Elim só entra no feed quando termina de ser salvo, e aí entra **depois** de tudo o que você já leu. Na prática: se você sempre continua do `next_cursor`, não perde evento, nem quando dois fatos acontecem no mesmo instante. O custo é um atraso de milissegundos (raramente, alguns segundos) entre o fato e o evento aparecer.
+
+**A ordem é a ordem de gravação.** Em casos raros, `occurred_at` de um evento pode ser um pouco anterior ao do evento que veio antes dele. Se a ordem real importa para você (por exemplo, dois status da mesma consulta), compare `occurred_at`.
+
+**Cada evento tem um `event_id` único.** Se o seu processo cair depois de processar a página e antes de gravar o cursor, a próxima leitura devolve os mesmos eventos de novo. Trate cada `event_id` uma vez só: guarde os ids processados, ou faça o processamento idempotente.
+
+**O feed não reconstrói o passado.** Um evento só existe se, no momento do fato, a clínica tinha a API ligada e uma chave com o escopo daquele tipo. Para a carga inicial, use as rotas de estado, como [`GET /appointments`](/referencia/appointments) e [`GET /attendants`](/referencia/attendants).
+
+## Retenção e cursor expirado
+
+O Elim guarda os eventos por **7 dias**. Depois disso eles são apagados.
+
+Um cursor que aponta para um evento com mais de 7 dias responde `410` com `ERR_CURSOR_EXPIRED`: os eventos entre ele e o mais antigo guardado podem ter sido apagados, e o Elim não tem como saber se você perdeu algo. Isso acontece quando o seu sistema fica mais de 7 dias sem ler, e também quando o feed da clínica fica 7 dias sem nenhum evento novo para a sua chave (o cursor não anda).
+
+Quando receber `410`:
+
+1. **Refaça a carga pelas rotas de estado**: [`GET /appointments?updated_since=`](/referencia/appointments) com um instante anterior ao último evento que você processou, [`GET /attendants`](/referencia/attendants) e, telefone a telefone se precisar, [`POST /whatsapp/conversations/search`](/referencia/conversations-search).
+2. **Recomece o feed sem cursor** (`GET /events` sem `after`) e siga normalmente.
+
+Ler o feed com frequência evita o problema na quase totalidade dos casos.
+
+## Frequência recomendada
+
+O limite de `GET /events` é **60 requisições por minuto por chave**.
+
+| Situação | Cadência |
+| --- | --- |
+| Com o [aviso](/aviso) cadastrado | Drene o feed a cada aviso, e faça uma leitura de segurança a cada 1 a 5 minutos |
+| Sem aviso, precisando de tempo quase real | Uma leitura a cada 5 a 15 segundos |
+| Sem pressa | Uma leitura por minuto |
+
+Enquanto `has_more` for `true`, chame em seguida, com `limit=500`, até esvaziar.
+
+## Formato de um evento
+
+```json
+{
+  "event_id": "8c1e2f4a-6b7d-4e9f-a0b1-c2d3e4f5a6b7",
+  "type": "appointment.status_changed",
+  "occurred_at": "2026-10-20T14:03:11.204Z",
+  "phone": "5511987654321",
+  "numero_destino": null,
+  "data": {
+    "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2",
+    "status": "confirmado",
+    "previous_status": "agendado",
+    "unscheduled": false,
+    "scheduled_for": "2026-10-21T09:30:00-03:00",
+    "by": "system"
+  }
+}
+```
+
+| Campo | O que é |
+| --- | --- |
+| `event_id` | Id único do evento. Use para não processar duas vezes. |
+| `type` | O tipo, da tabela abaixo. |
+| `occurred_at` | Quando o fato aconteceu, em UTC. |
+| `phone` | Telefone do contato ou paciente, em dígitos com `55` (`5511987654321`). `null` nos eventos que não são sobre uma pessoa (conta WhatsApp) e quando o paciente não tem telefone cadastrado. |
+| `numero_destino` | O número da clínica envolvido, em dígitos, quando o evento é de uma conversa por um número específico (mensagens, lead, pedidos de remarcar ou cancelar). `null` nos demais. |
+| `data` | Os campos do tipo. Novos campos podem ser acrescentados; ignore os que não conhece. |
+
+<Note>
+  **Nenhum evento traz o texto de mensagem.** Atendente, departamento e etiqueta vêm só por id: nomes de atendentes e departamentos em [`GET /attendants`](/referencia/attendants). Eventos de consulta não trazem médico, procedimento nem convênio.
+</Note>
+
+## Tipos de evento
+
+| `type` | Escopo | Quando | `phone` / `numero_destino` |
+| --- | --- | --- | --- |
+| `message.received` | `events:messages` | O contato mandou mensagem | contato / número da clínica |
+| `message.sent` | `events:messages` | A clínica mandou mensagem (atendente, chatbot, lembrete, disparo, API) | contato / número da clínica |
+| `message.status` | `whatsapp` | Mudou o status de uma mensagem enviada **pela API** | contato / número da clínica |
+| `conversation.assigned` | `events:conversations` | Mudou o atendente ou o departamento da conversa | contato / `null` |
+| `conversation.finished` | `events:conversations` | A conversa foi encerrada | contato / `null` |
+| `tag.added` | `events:tags` | Etiqueta colocada na conversa | contato / `null` |
+| `tag.removed` | `events:tags` | Etiqueta retirada da conversa | contato / `null` |
+| `appointment.status_changed` | `events:appointments` | Consulta criada, ou mudou de status, ou foi desmarcada ou reativada | paciente / `null` |
+| `appointment.reschedule_requested` | `events:appointments` | O paciente pediu para remarcar pelo botão do lembrete | contato / número da clínica |
+| `appointment.cancel_requested` | `events:appointments` | O paciente pediu para cancelar pelo botão do lembrete | contato / número da clínica |
+| `lead.created` | `events:leads` | Contato novo, segundo o encaminhamento de leads da clínica (veio de anúncio da Meta, ou é um telefone que a clínica não conhece) | contato / número da clínica |
+| `number.health_changed` | `events:account` | A Meta mudou a qualidade ou a faixa de volume de um número | `null` / `null` |
+| `template.status_changed` | `events:account` | A Meta aprovou, recusou ou pausou um template | `null` / `null` |
+| `contact.opted_out` | sempre entregue | O contato pediu para não receber mais mensagens | contato / `null` |
+| `patient.anonymized` | sempre entregue | O paciente foi anonimizado | telefone que o paciente tinha / `null` |
+
+### `message.received`
+
+```json
+{ "message_id": "wamid.HBgNNTUxMTk4NzY1NDMyMRUCABIYFjNFQjA…", "button_reply": "Quero atendimento" }
+```
+
+- `message_id`: id da mensagem no WhatsApp.
+- `button_reply`: o **rótulo** do botão do template que o contato tocou (texto que a clínica escreveu no template, não do paciente). `null` em qualquer outra mensagem.
+
+Mensagens importadas de histórico (com mais de 2 dias), reações e notas internas do Elim não geram evento.
+
+### `message.sent`
+
+```json
+{ "message_id": "wamid.HBgNNTUxMTk4NzY1NDMyMRUCABIYFjNFQjA…", "origin": "attendant", "attendant_id": "4b0c1e2d-…" }
+```
+
+- `origin`: quem enviou.
+
+  | Valor | Significado |
+  | --- | --- |
+  | `attendant` | Um atendente, pela tela do Elim (texto ou template) |
+  | `chatbot` | O chatbot da clínica |
+  | `reminder` | Lembrete de consulta, automático ou disparado manualmente |
+  | `bulk` | Disparo em massa feito pela clínica no Elim |
+  | `api` | Disparo pela API Pública |
+  | `automatic` | Outra mensagem automática do Elim |
+
+- `attendant_id`: id do usuário que enviou, quando foi uma pessoa. `null` nos envios automáticos. Nome em [`GET /attendants`](/referencia/attendants).
+
+### `message.status`
+
+Só para mensagens enviadas **pela API** (as do [`POST /whatsapp/messages`](/referencia/messages)). Um evento por status.
+
+```json
+{ "message_id": "wamid.HBgNNTUxMTk4NzY1NDMyMRUCABIYFjNFQjA…", "run_id": "673e92bb-3531-4218-a2da-b9568dc4d500", "status": "failed", "error_code": 131026 }
+```
+
+- `status`: `sent`, `delivered`, `read` ou `failed`.
+- `run_id`: o disparo de onde a mensagem saiu, ou `null` se não for possível associar.
+- `error_code`: código de erro da Meta, só quando `failed`; `null` nos demais.
+
+É a mesma informação de [`GET /runs/{run_id}/recipients`](/referencia/run-recipients), chegando por evento em vez de consulta.
+
+### `conversation.assigned`
+
+```json
+{ "attendant_id": "4b0c1e2d-…", "department_id": "9f8e7d6c-…", "by": "attendant" }
+```
+
+- `attendant_id`, `department_id`: o responsável **agora**. Qualquer um pode ser `null` (conversa sem atendente, ou sem departamento).
+- `by`: `attendant` quando alguém fez a mudança pela tela do Elim; `system` quando foi automático (o chatbot encaminhou para um departamento, a conversa foi atribuída automaticamente a quem respondeu, ou o atendente perdeu acesso).
+
+O chatbot define só o departamento: nesse caso `attendant_id` vem `null`. Encerrar uma conversa também tira o atendente: você recebe um `conversation.assigned` com `attendant_id: null` junto com o `conversation.finished`.
+
+### `conversation.finished`
+
+```json
+{ "attendant_id": "4b0c1e2d-…" }
+```
+
+- `attendant_id`: quem atendia a conversa no momento do encerramento, ou `null`.
+
+Uma nova mensagem do contato reabre a conversa. A reabertura não é um evento próprio: o `message.received` já indica.
+
+### `tag.added` e `tag.removed`
+
+```json
+{ "tag_id": "1a2b3c4d-…" }
+```
+
+Um evento por etiqueta. Só o id: a API não expõe o nome das etiquetas.
+
+### `appointment.status_changed`
+
+```json
+{
+  "appointment_id": "62f4d14e-94ce-4bd2-8365-c89811fee8b2",
+  "status": "confirmado",
+  "previous_status": "agendado",
+  "unscheduled": false,
+  "scheduled_for": "2026-10-21T09:30:00-03:00",
+  "by": "system"
+}
+```
+
+- `status`: o status atual no Elim: `agendado`, `confirmado`, `cancelado`, `reagendado`, `pendente`, `compareceu` ou `faltou`.
+- `previous_status`: o status anterior. `null` quando a consulta acabou de ser criada.
+- `unscheduled`: `true` quando a consulta foi **desmarcada** (sai da agenda, com `status: "cancelado"`). Desfazer a desmarcação gera outro evento, com `unscheduled: false`.
+- `scheduled_for`: data e hora da consulta, em ISO 8601 com o fuso de Brasília (`-03:00`).
+- `by`: quem mudou.
+
+  | Valor | Significado |
+  | --- | --- |
+  | `staff` | Alguém da clínica, pela tela do Elim |
+  | `sync` | Importação do sistema de agenda da clínica (iClin, ClinicWeb) |
+  | `system` | O próprio paciente (botão do lembrete, remarcação pelo link) ou um processo do Elim |
+
+### `appointment.reschedule_requested` e `appointment.cancel_requested`
+
+```json
+{ "appointment_id": null }
+```
+
+O paciente tocou em **Reagendar** ou **Cancelar** num lembrete. `appointment_id` vem sempre `null`: o mesmo toque costuma mudar o status da consulta, e é o `appointment.status_changed` (com o `appointment_id`) que diz qual consulta foi. Use o `phone` deste evento para ligar os dois, ou [`POST /appointments/search`](/referencia/appointments-search).
+
+### `lead.created`
+
+```json
+{
+  "name": "Maria",
+  "origem": "meta_ads",
+  "ctwaclid": "ARAkLkA8rmlFeiCktEJQ…",
+  "ad": { "source_id": "120211234567890123", "title": "Consulta de avaliação" }
+}
+```
+
+- `name`: o nome que o contato usa no WhatsApp, só se a clínica ativou o envio do nome no encaminhamento de leads; senão `null`.
+- `origem`: `meta_ads` (clicou num anúncio da Meta que abre conversa no WhatsApp) ou `organico`. O Elim não distingue Google Ads nem indicação.
+- `ctwaclid`: id do clique no anúncio, quando houver.
+- `ad`: o anúncio (`source_id`, `title`), quando houver; senão `null`.
+
+Este evento segue as mesmas regras do encaminhamento de leads configurado pela clínica no Elim: quem conta como lead, a oposição do titular e o envio do nome. Sem encaminhamento de leads configurado, o evento não sai.
+
+### `number.health_changed`
+
+```json
+{ "event": "DOWNGRADE", "tier": "TIER_250", "phone_number": "551140000000" }
+```
+
+- `event`: o aviso da Meta como ela envia, por exemplo `FLAGGED`, `UNFLAGGED`, `UPGRADE`, `DOWNGRADE`.
+- `tier`: a faixa de volume atual (por exemplo `TIER_1K`), ou `null`.
+- `phone_number`: o número da clínica afetado, em dígitos. Para o estado completo, consulte [`GET /whatsapp/numbers`](/referencia/numeros).
+
+### `template.status_changed`
+
+```json
+{ "template_name": "lembrete_consulta", "status": "REJECTED", "reason": "INVALID_FORMAT" }
+```
+
+- `status`: o novo status como a Meta envia (`APPROVED`, `REJECTED`, `PAUSED`, `DISABLED` e outros).
+- `reason`: o código do motivo dado pela Meta, ou `null`. Texto livre não é repassado.
+
+### `contact.opted_out`
+
+```json
+{ "source": "attendant" }
+```
+
+- `source`: `attendant` quando a clínica registrou o pedido pela tela do Elim; `meta` quando a Meta informou que o contato deixou de aceitar mensagens de marketing da clínica (erro `131050`).
+
+### `patient.anonymized`
+
+```json
+{ "patient_id": "0d1e2f3a-…" }
+```
+
+O `phone` do envelope é o telefone que o paciente tinha antes da anonimização: é por ele que o seu sistema encontra o que apagar.
+
+## Eventos que exigem ação
+
+Dois eventos não são informativos: são obrigações que a clínica repassa ao seu sistema. Toda chave que recebe eventos recebe os dois, sem escopo próprio.
+
+<Warning>
+  **`patient.anonymized`: apague.** Remova do seu sistema os dados ligados a esse `patient_id` e a esse telefone. Ao anonimizar, o Elim também apaga do feed os eventos anteriores desse telefone, inclusive os que você ainda não leu.
+
+  **`contact.opted_out`: pare de enviar.** O contato pediu à clínica para não receber mais mensagens. Pelo Elim, a partir desse momento, disparos livres para esse telefone falham com [`ERR_RECIPIENT_OPTED_OUT`](/erros#erros-por-destinatario). Se o seu sistema manda mensagens em nome da clínica por outro caminho, ele precisa respeitar o mesmo pedido. Lembretes da consulta que o paciente marcou continuam.
+</Warning>

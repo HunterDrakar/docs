@@ -71,15 +71,18 @@ No modo vinculado, cada destinatário traz o agendamento e a resposta:
     "status": "confirmado",
     "updated_at": "2026-09-02T05:39:06.049+00:00"
   },
-  "reply": { "button": "confirmar", "clicked_at": "2026-09-02T05:39:05.191+00:00" }
+  "reply": { "button": "confirmar", "label": "Confirmar", "clicked_at": "2026-09-02T05:39:05.191+00:00" }
 }
 ```
 
-- `reply` é o **último** botão de ação que o paciente tocou nessa conversa depois do envio: `confirmar`, `reagendar` ou `cancelar`. `null` enquanto não houver toque.
+- `reply` é o **último** botão do template que o paciente tocou nessa conversa depois do envio. `null` enquanto não houver toque.
+- `reply.button` é a ação reconhecida: `confirmar`, `reagendar` ou `cancelar`. Em botões que não são uma dessas ações (por exemplo "Quero atendimento"), `button` é `null` e o rótulo tocado está em `reply.label`. `label` vem sempre, com o texto do botão como está no template.
 - `appointment.status` é o status **no Elim**, e é o que vale. O toque em Confirmar vira `confirmado`; em Cancelar, `cancelado`; em Reagendar, o paciente recebe um link e o agendamento muda quando ele escolher a nova data. A recepção também pode mudar o status pela tela, e isso aparece aqui do mesmo jeito.
 - Valores possíveis de `appointment.status`: `agendado`, `confirmado`, `cancelado`, `reagendado`, `pendente`, `compareceu`, `faltou`.
 
-No modo livre, `appointment` e `reply` são sempre `null`.
+No modo livre, `appointment` é sempre `null`. `reply` aparece se o paciente tocar um botão do template, mas o toque não muda nada no Elim.
+
+Se você também lê o [feed de eventos](/eventos), o status de cada mensagem enviada pela API chega como `message.status` (escopo `whatsapp`) e o toque no botão como `message.received` com `button_reply`, sem precisar consultar os runs.
 
 ## Paginação
 
@@ -100,7 +103,7 @@ Passe `next_cursor` em `?cursor=` para a próxima página. `next_cursor: null` �
     Consulte `GET /runs/{run_id}` a cada **15 a 30 segundos** até `status` sair de `accepted`/`processing`. Um run de 1.000 destinatários leva alguns minutos.
   </Step>
   <Step title="Falhas de envio">
-    Com `completed`, busque `GET /runs/{run_id}/recipients?status=failed` e trate os `error.code`. Quase tudo ali **não saiu**; a exceção é `ERR_DELIVERY_UNCERTAIN`, que **pode ter chegado** ao paciente. Não reenvie esses automaticamente.
+    Com `completed`, busque `GET /runs/{run_id}/recipients?status=failed` e trate os `error.code`. Quase tudo ali **não saiu**; a exceção é `ERR_DELIVERY_UNCERTAIN`, que **pode ter chegado** ao paciente. Não reenvie esses automaticamente. `ERR_RECIPIENT_OPTED_OUT` também não deve ser reenviado: o contato pediu à clínica para não receber mensagens.
   </Step>
   <Step title="Entrega, leitura e respostas">
     Repita `GET /runs/{run_id}` numa cadência mais lenta (a cada 5 a 15 minutos) enquanto os contadores `delivered`/`read` ainda estiverem subindo, e pagine `recipients` quando precisar das respostas. A maior parte das respostas de botão chega na primeira hora; lembretes enviados na véspera recebem toques até o dia da consulta.
