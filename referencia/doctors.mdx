@@ -1,7 +1,7 @@
 ---
 title: "GET /doctors"
 sidebarTitle: "GET /doctors"
-description: "Os profissionais ativos da clínica e se cada um aceita agendamento online. Para escolher o doctor_id de GET /availability."
+description: "Os profissionais ativos da clínica e se cada um aparece hoje no link de agendamento. Para escolher o doctor_id de GET /availability."
 ---
 
 ```http
@@ -35,7 +35,9 @@ Só três campos saem: o nome é o mesmo que a página pública de auto-agendame
     </ResponseField>
 
     <ResponseField name="accepts_online_scheduling" type="boolean">
-      `true` quando o profissional aceita agendamento online. Só esses têm horários em `GET /availability`; os outros respondem `404 ERR_DOCTOR_NOT_FOUND` lá.
+      `true` quando o profissional aparece **hoje** no link de agendamento da clínica: agendamento online ligado, grade com algum horário e pelo menos um procedimento oferecido online com preço, sem desligamento já efetivado. Só esses têm horários em `GET /availability`.
+
+      O valor pode mudar sem que o cadastro do profissional mude: basta a grade dele acabar, ou ele ser desligado. Releia esta lista em vez de guardar o valor.
     </ResponseField>
   </Expandable>
 </ResponseField>

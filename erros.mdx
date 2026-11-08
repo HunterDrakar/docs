@@ -51,7 +51,7 @@ Todo erro tem o mesmo formato:
 | HTTP | Código | Significado | Tentar de novo? |
 | --- | --- | --- | --- |
 | `410` | `ERR_CURSOR_EXPIRED` | `GET /events`: o cursor aponta para um evento com mais de 7 dias, e os eventos do meio podem ter sido apagados | Não com o mesmo cursor. Refaça a carga pelas rotas de estado e recomece sem `after`. Veja [Retenção e cursor expirado](/eventos#retencao-e-cursor-expirado). |
-| `404` | `ERR_DOCTOR_NOT_FOUND` | `GET /availability`: profissional inexistente, de outra clínica, inativo ou sem agendamento online. Mesma resposta nos quatro casos, de propósito | Não. Escolha um profissional de `GET /doctors` com `accepts_online_scheduling: true`. |
+| `404` | `ERR_DOCTOR_NOT_FOUND` | `GET /availability`: profissional inexistente, de outra clínica, inativo, sem agendamento online ou sem procedimento oferecido online com preço. Mesma resposta nos cinco casos, de propósito | Não. Escolha um profissional de `GET /doctors` com `accepts_online_scheduling: true`. |
 | `409` | `ERR_PATIENT_AMBIGUOUS` | `POST /patients`: já existe cadastro com o telefone e não dá para confirmar que é a mesma pessoa (vários cadastros, ou um com nome diferente). Não revela nomes nem quantidade | Não. A clínica confere o cadastro no Elim. |
 | `404` | `ERR_CONVERSATION_NOT_FOUND` | `POST /whatsapp/conversations/search`: nenhuma conversa de WhatsApp com o telefone na clínica | Não, até o contato conversar com a clínica. |
 | `422` | `ERR_SCHEDULING_DISABLED` | `POST /scheduling-links`: a clínica não tem o auto-agendamento ligado, ou não tem endereço público | Não. A clínica precisa ligar o auto-agendamento no Elim. |

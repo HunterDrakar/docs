@@ -1,14 +1,20 @@
 ---
 title: "GET /availability"
 sidebarTitle: "GET /availability"
-description: "Os horários livres de um profissional num dia, pela mesma conta da página de auto-agendamento da clínica."
+description: "Os horários livres de um profissional num dia, pela mesma conta do link de agendamento da clínica: grade do profissional, bloqueios de agenda e desligamento."
 ---
 
 ```http
 GET https://www.elimagenda.com.br/api/v1/availability?doctor_id={doctor_id}&date=2026-10-21
 ```
 
-Devolve os horários em que o profissional pode ser agendado online naquele dia. A conta é a mesma da página pública de auto-agendamento da clínica: grade do profissional, horário de funcionamento e intervalo da clínica, consultas já marcadas, antecedência mínima e janela máxima de agendamento.
+Devolve os horários em que o profissional pode ser agendado online naquele dia. A conta é exatamente a do link público de agendamento da clínica, para o mesmo profissional e o mesmo dia:
+
+- **Grade do profissional:** os horários saem da grade cadastrada para aquele dia (inclusive datas específicas e semanas alternadas). Sem grade no dia, a lista vem vazia. O horário de funcionamento da clínica não substitui a grade.
+- **Bloqueios de agenda** da clínica ou do profissional tiram os horários que cobrem.
+- **Consultas já marcadas** ocupam a duração delas.
+- **Profissional desligado:** no próprio dia do desligamento ele ainda tem horários; a partir do dia seguinte, a lista vem vazia.
+- **Antecedência mínima e janela máxima** de agendamento da clínica.
 
 **Escopo:** `availability:read`.
 
@@ -21,7 +27,7 @@ Devolve os horários em que o profissional pode ser agendado online naquele dia.
 </ParamField>
 
 <ParamField query="doctor_id" type="string (uuid)" required>
-  Id de um profissional de [`GET /doctors`](/referencia/doctors) com `accepts_online_scheduling: true`. Ausente ou fora do formato UUID é `400 ERR_INVALID_REQUEST`.
+  Id de um profissional de [`GET /doctors`](/referencia/doctors), de preferência com `accepts_online_scheduling: true` (os outros não têm horário). Ausente ou fora do formato UUID é `400 ERR_INVALID_REQUEST`.
 </ParamField>
 
 <ParamField query="date" type="string (YYYY-MM-DD)" required>
@@ -31,7 +37,7 @@ Devolve os horários em que o profissional pode ser agendado online naquele dia.
 ## Resposta `200`
 
 <ResponseField name="data" type="array">
-  Horários livres do dia, em ordem. Lista vazia quando o profissional não atende nesse dia, quando tudo está ocupado, ou quando a data está fora da janela de agendamento da clínica (no passado ou além do limite de dias à frente). Horários mais próximos do que a antecedência mínima da clínica também não aparecem.
+  Horários livres do dia, em ordem. Lista vazia quando o profissional não tem grade nesse dia, quando tudo está ocupado ou bloqueado, quando ele já foi desligado antes dessa data, ou quando a data está fora da janela de agendamento da clínica (no passado ou além do limite de dias à frente). Horários mais próximos do que a antecedência mínima da clínica também não aparecem.
 
   <Expandable title="horário">
     <ResponseField name="start" type="string">
@@ -68,7 +74,7 @@ Devolve os horários em que o profissional pode ser agendado online naquele dia.
 | --- | --- |
 | `400` | `ERR_INVALID_REQUEST`: `doctor_id` ou `date` ausente ou inválido |
 | `403` | `ERR_SCOPE_MISSING`: falta `availability:read` |
-| `404` | `ERR_DOCTOR_NOT_FOUND`: o profissional não existe, é de outra clínica, está inativo ou não aceita agendamento online. A resposta é a mesma nos quatro casos, de propósito |
+| `404` | `ERR_DOCTOR_NOT_FOUND`: o profissional não existe, é de outra clínica, está inativo, não aceita agendamento online ou não tem nenhum procedimento oferecido online com preço. A resposta é a mesma nos cinco casos, de propósito. Profissional desligado **não** é 404: até a data do desligamento ele tem horários; depois, a lista vem vazia |
 | `500` | `ERR_INTERNAL`: a disponibilidade não pôde ser lida. Tente de novo |
 
 Mais os [erros de acesso](/autenticacao#erros-de-acesso).
