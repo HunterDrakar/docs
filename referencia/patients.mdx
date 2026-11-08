@@ -5,7 +5,7 @@ description: "Cria o cadastro de um paciente com nome e telefone, ou reconhece o
 ---
 
 ```http
-POST https://www.elimagenda.com.br/api/v1/patients
+POST https://www.elimagenda.com/api/v1/patients
 ```
 
 Use para ter um `patient_id` do Elim a partir do seu sistema, por exemplo quando um lead vira paciente.
@@ -76,7 +76,7 @@ Não há `Idempotency-Key` nesta rota: a própria regra acima resolve a repetiç
 <RequestExample>
 
 ```bash
-curl -s -X POST https://www.elimagenda.com.br/api/v1/patients \
+curl -s -X POST https://www.elimagenda.com/api/v1/patients \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "name": "Maria Souza", "phone": "+55 11 98765-4321" }'

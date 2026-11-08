@@ -9,7 +9,7 @@ O feed é uma fila **só de leitura** do que aconteceu na clínica: mensagem rec
 O Elim não empurra os eventos para o seu sistema. Se quiser saber **quando** consultar sem ficar perguntando, cadastre o [aviso de evento novo](/aviso), que só diz "tem coisa nova".
 
 ```http
-GET https://www.elimagenda.com.br/api/v1/events?after={cursor}&types={tipos}&limit=100
+GET https://www.elimagenda.com/api/v1/events?after={cursor}&types={tipos}&limit=100
 ```
 
 ## Como consumir
@@ -32,7 +32,7 @@ async function drainFeed() {
   for (;;) {
     const qs = new URLSearchParams({ limit: '500' })
     if (cursor) qs.set('after', cursor)
-    const res = await fetch(`https://www.elimagenda.com.br/api/v1/events?${qs}`, {
+    const res = await fetch(`https://www.elimagenda.com/api/v1/events?${qs}`, {
       headers: { Authorization: `Bearer ${process.env.ELIM_API_KEY}` },
     })
     if (res.status === 410) return rebuildFromStateAndRestart() // veja "Cursor expirado"

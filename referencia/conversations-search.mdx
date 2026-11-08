@@ -5,7 +5,7 @@ description: "O estado da conversa de WhatsApp de um telefone: quem atende, se e
 ---
 
 ```http
-POST https://www.elimagenda.com.br/api/v1/whatsapp/conversations/search
+POST https://www.elimagenda.com/api/v1/whatsapp/conversations/search
 ```
 
 O telefone vai no corpo, nunca na URL, pelo mesmo motivo explicado na [busca de consultas](/referencia/appointments-search): endereços de requisição ficam gravados em logs que ninguém controla.
@@ -83,7 +83,7 @@ Cada busca fica registrada no Elim, com ou sem resultado (o telefone pesquisado 
 <RequestExample>
 
 ```bash
-curl -s -X POST https://www.elimagenda.com.br/api/v1/whatsapp/conversations/search \
+curl -s -X POST https://www.elimagenda.com/api/v1/whatsapp/conversations/search \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "phone": "5511987654321" }'

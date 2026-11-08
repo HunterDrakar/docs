@@ -5,7 +5,7 @@ description: "Gera um link pessoal de auto-agendamento para um paciente: válido
 ---
 
 ```http
-POST https://www.elimagenda.com.br/api/v1/scheduling-links
+POST https://www.elimagenda.com/api/v1/scheduling-links
 ```
 
 O link abre a página de auto-agendamento da clínica já preenchida com o nome e o telefone que você enviou. Mande o link ao paciente pelo seu canal (WhatsApp, e-mail, SMS) e ele escolhe profissional, dia e horário.
@@ -57,7 +57,7 @@ Link vencido ou já usado não quebra a página: o paciente vê o aviso **"Este 
 <ResponseField name="data" type="object">
   <Expandable title="data">
     <ResponseField name="url" type="string">
-      O link pessoal, na forma `https://www.elimagenda.com.br/agendar/<clínica>?t=<código>`. Envie como está; não acrescente parâmetros com nome ou telefone.
+      O link pessoal, na forma `https://www.elimagenda.com/agendar/<clínica>?t=<código>`. Envie como está; não acrescente parâmetros com nome ou telefone.
     </ResponseField>
 
     <ResponseField name="expires_at" type="string (ISO 8601)">
@@ -69,7 +69,7 @@ Link vencido ou já usado não quebra a página: o paciente vê o aviso **"Este 
 <RequestExample>
 
 ```bash
-curl -s -X POST https://www.elimagenda.com.br/api/v1/scheduling-links \
+curl -s -X POST https://www.elimagenda.com/api/v1/scheduling-links \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "phone": "5511987654321", "name": "Maria Souza" }'
@@ -82,7 +82,7 @@ curl -s -X POST https://www.elimagenda.com.br/api/v1/scheduling-links \
 ```json 201
 {
   "data": {
-    "url": "https://www.elimagenda.com.br/agendar/clinica-exemplo?t=6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    "url": "https://www.elimagenda.com/agendar/clinica-exemplo?t=6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
     "expires_at": "2026-10-23T14:00:00.000Z"
   }
 }

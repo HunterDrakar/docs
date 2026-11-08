@@ -63,7 +63,7 @@ O bloco abaixo cobre os **disparos**. Para o feed de eventos, aponte o agente pa
 Se o agente for escrever a integração de disparos, dê a ele este bloco. É tudo o que precisa estar certo para o código funcionar de primeira; o resto da doc é detalhe.
 
 ```text
-Base: https://www.elimagenda.com.br/api/v1/whatsapp — header Authorization: Bearer elim_live_... em toda chamada.
+Base: https://www.elimagenda.com/api/v1/whatsapp — header Authorization: Bearer elim_live_... em toda chamada.
 1.  GET /templates?channel=dispatch|service → só templates APROVADOS; cada um traz variables[] com key e filled_by.
 2.  filled_by=server: o Elim preenche a partir do agendamento, NÃO envie. filled_by=client: obrigatória, você envia.
 3.  Destinatário VINCULADO = { appointment_id } (o phone é o do paciente; buttons funcionam). LIVRE = { phone, variables }.

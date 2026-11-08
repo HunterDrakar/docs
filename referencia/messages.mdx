@@ -5,7 +5,7 @@ description: "Dispara um template aprovado para até 1.000 destinatários. Respo
 ---
 
 ```http
-POST https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=dispatch
+POST https://www.elimagenda.com/api/v1/whatsapp/messages?channel=dispatch
 ```
 
 Leia [Como disparar](/disparos) antes: modos, variáveis e Idempotency-Key estão explicados lá. Esta página é a referência do contrato.
@@ -55,7 +55,7 @@ Leia [Como disparar](/disparos) antes: modos, variáveis e Idempotency-Key estã
 <RequestExample>
 
 ```bash Vinculado
-curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=dispatch" \
+curl -s -X POST "https://www.elimagenda.com/api/v1/whatsapp/messages?channel=dispatch" \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Idempotency-Key: lembretes-2026-09-03-manha" \
   -H "Content-Type: application/json" \
@@ -69,7 +69,7 @@ curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=
 ```
 
 ```bash Livre
-curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=dispatch" \
+curl -s -X POST "https://www.elimagenda.com/api/v1/whatsapp/messages?channel=dispatch" \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Idempotency-Key: campanha-checkup-2026-09" \
   -H "Content-Type: application/json" \

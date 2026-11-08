@@ -5,7 +5,7 @@ description: "Os números da API Oficial da clínica e se a Meta está aceitando
 ---
 
 ```http
-GET https://www.elimagenda.com.br/api/v1/whatsapp/numbers
+GET https://www.elimagenda.com/api/v1/whatsapp/numbers
 ```
 
 A saúde é **perguntada à Meta**, não inferida de falhas recentes. Use antes de um disparo grande: se `can_send_message` for `BLOCKED`, o `POST /messages` vai responder `429 ERR_CLINIC_THROTTLED` com o mesmo motivo.

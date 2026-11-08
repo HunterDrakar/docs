@@ -27,7 +27,7 @@ A chave começa com um prefixo seguido de 64 caracteres hexadecimais (minúsculo
 
 | Prefixo | Onde vale |
 | --- | --- |
-| `elim_live_` | **Produção** (`www.elimagenda.com.br`). É a única aceita lá. |
+| `elim_live_` | **Produção** (`www.elimagenda.com`). É a única aceita lá. |
 | `elim_test_` | **Só no ambiente de testes do Elim**, com dados de teste. O endereço do ambiente de testes é informado pelo Elim junto com a chave. |
 
 Uma chave `elim_test_` enviada à produção responde `401 ERR_INVALID_KEY`, como qualquer chave inválida, e vice-versa. Desenvolva e teste a integração com a chave de teste, e troque pela `elim_live_` da clínica só para ir ao ar.

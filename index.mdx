@@ -53,10 +53,10 @@ Cada rota exige um escopo que a clínica libera na aba API. Veja [Escopos e comp
 ## Endereço base
 
 ```text
-https://www.elimagenda.com.br/api/v1
+https://www.elimagenda.com/api/v1
 ```
 
-Todas as rotas desta documentação são relativas a esse endereço: `GET /events` é `https://www.elimagenda.com.br/api/v1/events`, e `GET /whatsapp/templates` é `https://www.elimagenda.com.br/api/v1/whatsapp/templates`. Nas páginas de [Disparos](/disparos) e [Acompanhamento](/acompanhamento), as rotas aparecem abreviadas (`GET /templates`, `POST /messages`, `GET /runs/{run_id}`): todas ficam em `/whatsapp`.
+Todas as rotas desta documentação são relativas a esse endereço: `GET /events` é `https://www.elimagenda.com/api/v1/events`, e `GET /whatsapp/templates` é `https://www.elimagenda.com/api/v1/whatsapp/templates`. Nas páginas de [Disparos](/disparos) e [Acompanhamento](/acompanhamento), as rotas aparecem abreviadas (`GET /templates`, `POST /messages`, `GET /runs/{run_id}`): todas ficam em `/whatsapp`.
 
 Toda resposta vem com `Cache-Control: no-store`: nunca guarde uma resposta em cache intermediário.
 
@@ -84,11 +84,11 @@ Toda resposta vem com `Cache-Control: no-store`: nunca guarde uma resposta em ca
 
 ```bash
 # 1. Qual template? O que ele espera?
-curl -s https://www.elimagenda.com.br/api/v1/whatsapp/templates \
+curl -s https://www.elimagenda.com/api/v1/whatsapp/templates \
   -H "Authorization: Bearer $ELIM_API_KEY"
 
 # 2. Dispara para um agendamento do Elim (modo vinculado)
-curl -s -X POST https://www.elimagenda.com.br/api/v1/whatsapp/messages \
+curl -s -X POST https://www.elimagenda.com/api/v1/whatsapp/messages \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Idempotency-Key: lembrete-2026-09-02-turno-manha" \
   -H "Content-Type: application/json" \
@@ -101,7 +101,7 @@ curl -s -X POST https://www.elimagenda.com.br/api/v1/whatsapp/messages \
 # → 202 { "run_id": "673e92bb-…", "status": "accepted", "total": 1 }
 
 # 3. Como foi?
-curl -s https://www.elimagenda.com.br/api/v1/whatsapp/runs/673e92bb-3531-4218-a2da-b9568dc4d500/recipients \
+curl -s https://www.elimagenda.com/api/v1/whatsapp/runs/673e92bb-3531-4218-a2da-b9568dc4d500/recipients \
   -H "Authorization: Bearer $ELIM_API_KEY"
 ```
 
@@ -123,7 +123,7 @@ curl -s https://www.elimagenda.com.br/api/v1/whatsapp/runs/673e92bb-3531-4218-a2
 </Steps>
 
 ```bash
-curl -s "https://www.elimagenda.com.br/api/v1/events?limit=100" \
+curl -s "https://www.elimagenda.com/api/v1/events?limit=100" \
   -H "Authorization: Bearer $ELIM_API_KEY"
 # → 200 { "data": [ … ], "next_cursor": "MTIz…", "has_more": false }
 ```

@@ -102,7 +102,7 @@ Use algo que identifique **a intenção**, não o momento: `lembretes-2026-09-03
 ## 4. Dispare
 
 ```bash
-curl -s -X POST "https://www.elimagenda.com.br/api/v1/whatsapp/messages?channel=service" \
+curl -s -X POST "https://www.elimagenda.com/api/v1/whatsapp/messages?channel=service" \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Idempotency-Key: lembretes-2026-09-03-manha" \
   -H "Content-Type: application/json" \

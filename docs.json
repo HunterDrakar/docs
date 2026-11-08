@@ -72,14 +72,14 @@
   "navbar": {
     "links": [
       {
-        "href": "https://www.elimagenda.com.br",
+        "href": "https://www.elimagenda.com",
         "label": "Elim"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Entrar no Elim",
-      "href": "https://www.elimagenda.com.br/login"
+      "href": "https://www.elimagenda.com/login"
     }
   },
   "contextual": {
@@ -96,7 +96,7 @@
   },
   "footer": {
     "socials": {
-      "website": "https://www.elimagenda.com.br"
+      "website": "https://www.elimagenda.com"
     }
   },
   "description": "Dispare templates de WhatsApp aprovados pela Meta, acompanhe entrega e respostas, e receba os eventos da clínica (mensagens, conversas, consultas e leads) no seu sistema."

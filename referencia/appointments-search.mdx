@@ -5,7 +5,7 @@ description: "As consultas de um telefone, mais recentes primeiro. O telefone va
 ---
 
 ```http
-POST https://www.elimagenda.com.br/api/v1/appointments/search
+POST https://www.elimagenda.com/api/v1/appointments/search
 ```
 
 Use para responder "este contato tem consulta marcada?" a partir de um telefone, por exemplo ao receber um `lead.created` ou um `appointment.reschedule_requested`.
@@ -67,7 +67,7 @@ Cada busca fica registrada no Elim, com as consultas devolvidas (o telefone pesq
 <RequestExample>
 
 ```bash
-curl -s -X POST https://www.elimagenda.com.br/api/v1/appointments/search \
+curl -s -X POST https://www.elimagenda.com/api/v1/appointments/search \
   -H "Authorization: Bearer $ELIM_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "phone": "5511987654321" }'
