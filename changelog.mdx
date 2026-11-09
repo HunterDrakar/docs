@@ -1,0 +1,29 @@
+---
+title: "Changelog"
+description: "Mudanças na API Pública do Elim que afetam quem já integra."
+---
+
+## Erros da Meta mais específicos e motivo da falha de entrega
+
+**Sem versão nova.** A mudança vale para `/api/v1`, não cria nem remove código `ERR_*` e não muda o formato do corpo de erro. Ela troca o código devolvido em casos em que antes respondíamos `502 ERR_META_UNAVAILABLE` ("tente novamente") e nenhuma nova tentativa resolveria.
+
+### Respostas HTTP
+
+| Situação na Meta | Antes | Agora | O que fazer |
+| --- | --- | --- | --- |
+| Conta da clínica bloqueada pela Meta (131042, 131048, 131064) | `502 ERR_META_UNAVAILABLE` | `429 ERR_CLINIC_THROTTLED` | Não repetir em laço: a clínica precisa regularizar a conta na Meta. A mensagem traz o motivo. |
+| Template recusado pela Meta no uso (131008, 132000–132016: inexistente no idioma, pausado, desativado, variáveis que não batem) | `502 ERR_META_UNAVAILABLE` | `409 ERR_TEMPLATE_NOT_APPROVED` | Conferir o template e as variáveis. A mensagem traz o motivo. |
+| Parâmetro inválido (100) | `502 ERR_META_UNAVAILABLE` | `500 ERR_INTERNAL` | É erro do Elim: repetir o mesmo pedido não resolve. Fale com o suporte. |
+| Limite de vazão do número na Meta (130429) | `502 ERR_META_UNAVAILABLE` | `429 ERR_RATE_LIMITED` | Esperar e tentar de novo, com recuo. Sem `Retry-After`. |
+| Sem permissão na conta (100 com "permission") | `502 ERR_META_UNAVAILABLE` | `409 ERR_META_AUTH` | A clínica precisa reconectar o WhatsApp no Elim. |
+| Instabilidade ou erro desconhecido da Meta | `502 ERR_META_UNAVAILABLE` | igual | Tentar de novo com espera. |
+
+Token expirado (`409 ERR_META_AUTH`) e limite de chamadas (`429 ERR_RATE_LIMITED`, com `Retry-After`) não mudam. Veja a lista completa em [Erros](/erros).
+
+### Destinatários do disparo
+
+Em [`GET /whatsapp/runs/{id}/recipients`](/referencia/run-recipients), quando a Meta aceita a mensagem e reprova a entrega depois (o aviso chega pelo webhook, minutos mais tarde), o destinatário com `status: "failed"` passa a trazer `"error": { "code": "ERR_META_REJECTED", "meta_code": <código da Meta> }`. Antes vinha `"error": null`. `meta_code` pode ser `null` quando a Meta não informa o código.
+
+### Compatibilidade
+
+Quem trata `ERR_META_UNAVAILABLE` como "tentar de novo" passa a receber menos desses, e os códigos novos já existiam no catálogo. Quem lê `recipients[].error` só quando `status = "failed"` não precisa mudar nada; quem assumia `error: null` para falha de entrega passa a receber o objeto.

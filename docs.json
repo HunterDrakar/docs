@@ -17,7 +17,8 @@
           "autenticacao",
           "escopos",
           "erros",
-          "agentes-de-ia"
+          "agentes-de-ia",
+          "changelog"
         ]
       },
       {

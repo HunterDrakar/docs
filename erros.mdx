@@ -42,7 +42,7 @@ Todo erro tem o mesmo formato:
 | `400` | `ERR_INVALID_CHANNEL` | `?channel=` não é `service` nem `dispatch` | Não. |
 | `404` | `ERR_TEMPLATE_NOT_FOUND` | Template não existe no número escolhido | Não. Confira `GET /templates` no mesmo `channel`. |
 | `404` | `ERR_RUN_NOT_FOUND` | Disparo inexistente, de outra clínica ou já expirado (60 dias) | Não. |
-| `409` | `ERR_TEMPLATE_NOT_APPROVED` | O template existe mas a Meta ainda não aprovou | Depois que a Meta aprovar. |
+| `409` | `ERR_TEMPLATE_NOT_APPROVED` | O template existe mas a Meta ainda não aprovou, ou a Meta recusou o template no uso (pausado, desativado, inexistente no idioma, variáveis que não batem). A mensagem traz o motivo. | Não com o mesmo pedido. Depois que a Meta aprovar, ou corrija o template e as variáveis. |
 | `409` | `ERR_IDEMPOTENCY_CONFLICT` | A mesma `Idempotency-Key` já foi usada com outro conteúdo | Não. Use uma chave nova para um pedido novo. |
 | `409` | `ERR_RUN_IN_PROGRESS` | Já existe um disparo em processamento para a clínica | Sim, quando o disparo atual terminar. Consulte `GET /runs`. |
 
@@ -79,9 +79,9 @@ Tudo ou nada: se **um** destinatário for inválido, nada é enviado e a respost
 | --- | --- | --- | --- |
 | `409` | `ERR_NO_DISPATCH_PROVIDER` | A clínica não tem número da API Oficial (Meta) configurado no Elim | Não. Configure no Elim. |
 | `409` | `ERR_CHANNEL_NOT_CONFIGURED` | O `channel` pedido é válido, mas a clínica não tem número nele | Não. Use o outro canal (veja `GET /numbers`). |
-| `409` | `ERR_META_AUTH` | A conexão da clínica com a Meta expirou ou perdeu permissão | Não. É preciso reconectar dentro do Elim. |
-| `429` | `ERR_CLINIC_THROTTLED` | A Meta está bloqueando envios deste número (qualidade, limite de mensagens, verificação pendente). A mensagem traz o motivo. | Sim, mais tarde. `GET /numbers` mostra `health_reason`. |
-| `502` | `ERR_META_UNAVAILABLE` | A Meta não respondeu | Sim, com espera exponencial. |
+| `409` | `ERR_META_AUTH` | A conexão da clínica com a Meta expirou, perdeu permissão ou não tem permissão na conta | Não. É preciso reconectar dentro do Elim. |
+| `429` | `ERR_CLINIC_THROTTLED` | A Meta bloqueou a conta da clínica (pagamento, qualidade ou limite de mensagens, verificação pendente). A mensagem traz o motivo. | Não em laço: só depois que a clínica regularizar a conta na Meta. `GET /numbers` mostra `health_reason`. |
+| `502` | `ERR_META_UNAVAILABLE` | A Meta não respondeu, ou devolveu um erro instável ou desconhecido | Sim, com espera exponencial. |
 | `500` | `ERR_INTERNAL` | Falha interna do Elim | Sim, uma ou duas vezes. Se persistir, fale com o Elim. |
 
 ## Erros por destinatário
